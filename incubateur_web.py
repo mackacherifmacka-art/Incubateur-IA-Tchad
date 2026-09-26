@@ -6,7 +6,7 @@ import time
 import datetime
 
 # ============================================
-# INCUBATEUR IA TCHAD - v9 (design professionnel)
+# INCUBATEUR IA TCHAD - v10\n# Formulaires téléchargeables par étape +\n# dépôt du formulaire rempli + analyse personnalisée du coach IA
 # Parcours réorganisé selon 9 étapes de coaching
 # professionnel (sans nom d'organisation) :
 # chaque étape = objectif + livrables + coach IA
@@ -152,7 +152,7 @@ def sauvegarder(username):
         c.execute("INSERT OR REPLACE INTO data VALUES (?, ?, ?)",
                   (username, cle, str(st.session_state.get(cle))))
     for cle, valeur in st.session_state.items():
-        if cle.startswith(("etape_", "diag_", "synthese_")):
+        if cle.startswith(("etape_", "diag_", "synthese_", "form_")):
             c.execute("INSERT OR REPLACE INTO data VALUES (?, ?, ?)",
                       (username, cle, str(valeur)))
     conn.commit()
@@ -450,6 +450,220 @@ ETAPES = [
     },
 ]
 
+
+# ---------- FORMULAIRES DE TRAVAIL (1 par étape) ----------
+TEMPLATES = [
+    ("fiche_client_probleme.txt", """==============================================
+FICHE CLIENT / PROBLÈME — Etape 1
+==============================================
+Porteur de projet : ..................................
+Date : ..................................
+
+1. SEGMENT CLIENT PRINCIPAL (qui paie vraiment ?)
+   ..................................................
+
+2. SEGMENT SECONDAIRE (qui influence ?)
+   ..................................................
+
+3. DOULEUR PRIORITAIRE (le probleme n°1 du client)
+   ..................................................
+
+4. CONTEXTE D'ACHAT (ou / quand / comment il achète)
+   ..................................................
+
+5. ALTERNATIVES ACTUELLES (ce qu'il fait aujourd'hui)
+   ..................................................
+
+6. BUDGET / CAPACITE A PAYER
+   ..................................................
+
+7. PREUVE RECHERCHEE (precommande / RDV / pilote ?)
+   ..................................................
+"""),
+    ("proposition_valeur.txt", """==============================================
+PROPOSITION DE VALEUR — Etape 2
+==============================================
+1. POUR QUI ? (segment precis)
+   ..................................................
+
+2. QUEL PROBLEME ? (en une phrase)
+   ..................................................
+
+3. QUELLE SOLUTION ?
+   ..................................................
+
+4. QUEL BENEFICE CONCRET ? (resultat mesurable)
+   ..................................................
+
+5. MESSAGE 1 A TESTER : ..................................
+   Retour client : ..................................
+
+6. MESSAGE 2 A TESTER : ..................................
+   Retour client : ..................................
+
+7. MESSAGE 3 A TESTER : ..................................
+   Retour client : ..................................
+
+8. TA DIFFERENCIATION (prix / qualite / proximite / confiance)
+   ..................................................
+"""),
+    ("checklist_mvp.txt", """==============================================
+CHECKLIST MVP + PLAN DE TEST — Etape 3
+==============================================
+1. FONCTIONNALITE MINIMUM DU MVP
+   ..................................................
+
+2. TEST A REALISER (quoi, exactement ?)
+   ..................................................
+
+3. AVEC QUI ? (segment teste)
+   ..................................................
+
+4. CRITERE DE SUCCES (mesurable)
+   ..................................................
+
+5. DATE / LIEU DU TEST
+   ..................................................
+
+6. RETOURS CLES RECUEILLIS
+   ..................................................
+
+7. ITERATION n°1 (amélioration appliquée)
+   ..................................................
+
+8. ITERATION n°2
+   ..................................................
+"""),
+    ("business_model_pricing.txt", """==============================================
+BUSINESS MODEL + PRICING — Etape 4
+==============================================
+SEGMENTS CLIENTS : ..................................
+PROPOSITION DE VALEUR : ..................................
+CANAUX DE VENTE : ..................................
+SOURCE DE REVENUS : ..................................
+
+COUTS DIRECTS (par unité vendue) :
+  Matiere / achat : .......... FCFA
+  Transport : .......... FCFA
+  Main d'oeuvre : .......... FCFA
+  Autres : .......... FCFA
+  TOTAL DIRECTS : .......... FCFA
+
+PRIX DE VENTE : .......... FCFA
+MARGE BRUTE : .......... FCFA (prix - coûts)
+
+COMMENTAIRE (prix du marché / capacité à payer) :
+   ..................................................
+"""),
+    ("pipeline_ventes.txt", """==============================================
+PIPELINE VENTES — Etape 5
+==============================================
+Canal principal choisi : ..................................
+Objectif 30 jours : .......... leads
+
+LEAD/CLIENT | CANAL | STATUT(Lead/RDV/Offre/Vente) | PROCHAINE ACTION | DATE
+............|.......|...............................|..................|.....
+............|.......|...............................|..................|.....
+............|.......|...............................|..................|.....
+............|.......|...............................|..................|.....
+
+VENTE / PRECOMMANDE / PILOTE OBTENU ?
+   ..................................................
+
+OBJECTION LA PLUS FREQUENTE + TA REPONSE :
+   ..................................................
+"""),
+    ("cashflow_12mois.txt", """==============================================
+CASHFLOW 12 MOIS + BESOIN — Etape 6
+==============================================
+MOIS | ENTREES | SORTIES | SOLDE | COMMENTAIRES
+M1   | ..........|..........|.......|..............
+M2   | ..........|..........|.......|..............
+M3   | ..........|..........|.......|..............
+(suite jusqu'à M12)
+
+CASH DISPONIBLE ACTUEL : .......... FCFA
+AUTONOMIE (semaines) : ..........
+
+BESOIN DE FINANCEMENT : .......... FCFA
+USAGE DES FONDS (poste par poste) :
+  ..................................................
+OPTION 1 (subvention/concours) : ..................................
+OPTION 2 (prêt microfinance/banque) : ..................................
+OPTION 3 (partenariat/précommande) : ..................................
+"""),
+    ("operations_qualite.txt", """==============================================
+OPERATIONS & QUALITE — Etape 7
+==============================================
+PROCESSUS CRITIQUE n°1 : ..................................
+  Étape 1 : .......... Responsable : .......... Délai : ....
+  Étape 2 : .......... Responsable : .......... Délai : ....
+  Contrôle qualité : ..................................
+
+PROCESSUS CRITIQUE n°2 : ..................................
+  ..................................................
+
+CHECKLIST QUALITE (5 points minimum) :
+  [ ] ..................................
+  [ ] ..................................
+  [ ] ..................................
+
+INDICATEURS SUIVIS (délais, retours, pertes) :
+   ..................................................
+
+OÙ PERDS-TU DU TEMPS / ARGENT ?
+   ..................................................
+"""),
+    ("kit_admin_juridique.txt", """==============================================
+KIT ADMIN / JURIDIQUE / RISQUES — Etape 8
+==============================================
+DOCUMENTS DISPONIBLES (ventes, dépenses, inventaire...) :
+   ..................................................
+
+CONTRAT DE VENTE (éléments prévus) :
+   ..................................................
+
+CONTRAT DE PRESTATION : ..................................
+CONTRAT DE PARTENARIAT : ..................................
+
+RISQUES MAJEURS (Top 10) :
+  1. ......................... Parade : .........................
+  2. ......................... Parade : .........................
+  3. ......................... Parade : .........................
+
+FORMALISATION : que faire MAINTENANT ? plus tard ?
+   Maintenant : ..................................
+   Plus tard : ..................................
+"""),
+    ("pitch_financement.txt", """==============================================
+PITCH & DOSSIER DE FINANCEMENT — Etape 9
+==============================================
+1. PROBLÈME (avec preuve terrain) :
+   ..................................................
+2. CLIENT CIBLE :
+   ..................................................
+3. SOLUTION (MVP) :
+   ..................................................
+4. PROPOSITION DE VALEUR :
+   ..................................................
+5. MARCHÉ & CONCURRENCE :
+   ..................................................
+6. MODÈLE ÉCONOMIQUE (revenus + coûts) :
+   ..................................................
+7. TRACTION (ventes / pilotes / pipeline) :
+   ..................................................
+8. STRATÉGIE COMMERCIALE (canaux) :
+   ..................................................
+9. ÉQUIPE (rôles) :
+   ..................................................
+10. BESOIN DE FINANCEMENT + usage des fonds :
+   ..................................................
+
+10 FINANCEURS / PARTENAIRES CIBLÉS :
+   1. ................. 2. ................. 3. .................
+"""),
+]
+
 # ---------- COACH IA GÉNÉRATIVE (Gemini) ----------
 PROMPT_COACH = """
 Tu es "Coach IA", le mentor principal d'un incubateur d'entreprises numérique
@@ -580,7 +794,11 @@ def envoyer_message(i, j, titre_etape):
     cle_chat = f"chat_{i}_{j}"
     message = st.session_state.get(cle_champ, "").strip()
     if message:
-        reponse = reponse_ia_genai(message, construire_contexte(titre_etape))
+        contexte = construire_contexte(titre_etape)
+        formulaire = st.session_state.get(f"form_{i}", "")
+        if formulaire:
+            contexte += "\nFormulaire rempli de l'étape :\n" + formulaire[:800]
+        reponse = reponse_ia_genai(message, contexte)
         if reponse is None:
             reponse = reponse_ia(message, titre_etape)
             reponse += "\n\n_⚙️ (Mode hors-ligne : branche la clé Gemini pour le coach complet)_"
@@ -589,6 +807,44 @@ def envoyer_message(i, j, titre_etape):
         ancien = st.session_state.get(f"synthese_{i}", "")
         st.session_state[f"synthese_{i}"] = (ancien + "\n- " + message).strip()
         st.session_state[cle_champ] = ""
+
+
+def analyser_formulaire(i):
+    """Le coach IA analyse le formulaire rempli et oriente l'entrepreneur."""
+    contenu = st.session_state.get(f"form_{i}", "")
+    if not contenu:
+        return
+    titre = ETAPES[i]["titre"]
+    prompt = (
+        "Tu es le coach d'un incubateur d'entreprises au Tchad. L'entrepreneur "
+        f"({st.session_state.get('prenom', '')}, domaine : "
+        f"{st.session_state.get('diag_domaine', '')}) a rempli le formulaire de "
+        f"l'étape « {titre} ». Voici son formulaire :\n\n"
+        f"{contenu}\n\n"
+        "Fais une analyse structurée et bienveillante (200-300 mots max) :\n"
+        "✅ Points solides du formulaire (cite ses propres mots)\n"
+        "⚠️ Lacunes ou zones vagues à combler\n"
+        "🧭 Orientation prioritaire : sur quoi se concentrer maintenant\n"
+        "❓ 2-3 questions à creuser en séance de coaching\n"
+        "Adapte-toi au contexte tchadien, sois exigeant mais encourageant.")
+    resultat = None
+    if GENAI_OK:
+        try:
+            genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+            model = genai.GenerativeModel("gemini-1.5-flash")
+            resultat = model.generate_content(prompt).text
+        except Exception:
+            resultat = None
+    if resultat is None:
+        resultat = ("⚠️ _Analyse IA indisponible (mode hors-ligne). En attendant, "
+                    "vérifie : chaque champ est-il rempli ? Chaque chiffre est-il "
+                    "justifié ? Un collègue pourrait-il comprendre ton formulaire "
+                    "sans t'expliquer ? Relance l'analyse quand l'IA est branchée._")
+    st.session_state[f"analyse_{i}"] = resultat
+    # L'analyse enrichit aussi le contexte des prochains échanges coaching
+    st.session_state[f"synthese_{i}"] = (
+        st.session_state.get(f"synthese_{i}", "") +
+        f"\n[Formulaire rempli]\n{contenu[:500]}").strip()
 
 # ---------- FORMULES ----------
 FORMULES = {
@@ -864,6 +1120,39 @@ elif page == "🗺️ Mon parcours":
                             f"chat_{i}_{j}", []):
                         st.markdown(f"> **Toi :** {question_posee}")
                         st.markdown(reponse)
+
+                st.divider()
+                st.markdown("**📄 Formulaire de travail à remplir**")
+                st.caption("1. Télécharge le formulaire — 2. Remplis-le — "
+                           "3. Re-dépose-le ici — 4. Demande l'analyse du coach")
+                nom_fichier, contenu_template = TEMPLATES[i]
+                st.download_button("⬇️ Télécharger le formulaire",
+                                   data=contenu_template,
+                                   file_name=nom_fichier,
+                                   mime="text/plain",
+                                   key=f"dl_{i}")
+                fichier = st.file_uploader("Dépose ton formulaire rempli "
+                                           "(.txt ou .md)", type=["txt", "md"],
+                                           key=f"up_{i}")
+                if fichier is not None:
+                    try:
+                        texte = fichier.getvalue().decode("utf-8", errors="ignore")
+                        st.session_state[f"form_{i}"] = texte
+                        st.success(f"✅ « {fichier.name} » reçu !")
+                        with st.expander("Aperçu du formulaire reçu"):
+                            st.text(texte[:600])
+                        if st.button("🤖 Analyser mon formulaire",
+                                     key=f"ana_{i}",
+                                     on_click=analyser_formulaire,
+                                     args=(i,)):
+                            pass
+                    except Exception:
+                        st.error("Format illisible. Enregistre ton formulaire "
+                                 "en .txt et re-dépose-le.")
+
+                if st.session_state.get(f"analyse_{i}"):
+                    st.markdown("**🧑‍🏫 Analyse de ton coach :**")
+                    st.markdown(st.session_state[f"analyse_{i}"])
 
                 st.divider()
                 if a_discute:
