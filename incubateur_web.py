@@ -5,10 +5,12 @@ import os
 import time
 
 # ============================================
-# INCUBATEUR IA TCHAD - v5
-# Corrections : bug des champs de réponse corrigé
-# Nouveautés : choix du DOMAINE d'activité +
-# synthèse structurée générée par l'IA
+# INCUBATEUR IA TCHAD - v6
+# - Phase Admission SUPPRIMÉE (on commence par
+#   "Analyse et validation de l'idée")
+# - Quand l'entrepreneur coche une étape, l'IA
+#   DISCUTE avec lui : question + réponses aux
+#   préoccupations (mini-chat intégré)
 # ============================================
 
 st.set_page_config(page_title="Incubateur IA Tchad", page_icon="🇹🇩")
@@ -158,7 +160,7 @@ DOMAINES = {
         "conseil": "Respecte impérativement la réglementation sanitaire — la confiance est ton premier capital."
     },
     "Autre domaine": {
-        "opportunites": "Chaque secteur a ses opportunités : l'étude de marché de la Phase 2 les révèlera.",
+        "opportunites": "Chaque secteur a ses opportunités : l'étude de marché de la Phase 1 les révèlera.",
         "conseil": "Décris précisément ton activité dans tes réponses pour un accompagnement sur mesure."
     }
 }
@@ -225,33 +227,145 @@ DIAGNOSTICS = {
     }
 }
 
-# ---------- LES 6 PHASES ----------
+# ---------- LE PARCOURS (Admission supprimée) ----------
+# Chaque étape a maintenant sa QUESTION d'IA qui se
+# déclenche quand l'entrepreneur coche la case.
 PHASES = [
-    ("Phase 1 - Admission en incubateur", [
-        "Déposer le dossier de candidature (idée + profil + besoins)",
-        "Évaluation par le comité de sélection (faisabilité, originalité, motivation)",
-        "Signature de la convention d'incubation (durée : 6 à 24 mois)"]),
-    ("Phase 2 - Analyse et validation de l'idée", [
-        "Étude de marché : clients cibles, concurrence, tendances",
-        "Affiner l'idée avec l'aide de l'IA",
-        "Décider : poursuivre, adapter ou abandonner"]),
-    ("Phase 3 - Business plan", [
-        "Construire le modèle économique (revenus, coûts, prix, valeur)",
-        "Rédiger le business plan complet (prévisionnel, stratégie, organisation)",
-        "Préparer le pitch pour convaincre partenaires et investisseurs"]),
-    ("Phase 4 - Accompagnement et formation", [
-        "Formations : gestion, finance, marketing, droit, numérique",
-        "Mentorat : échanges avec des entrepreneurs expérimentés",
-        "Constituer son réseau (fournisseurs, clients, investisseurs)"]),
-    ("Phase 5 - Mise en place opérationnelle", [
-        "Formalisation juridique : choix du statut, RCCM, NIF",
-        "Identité visuelle, site web, outils de communication",
-        "Ressources : local, matériel, premiers financements"]),
-    ("Phase 6 - Lancement et après-incubation", [
-        "Lancement avec tests pilotes sur le marché",
-        "Poursuite : pépinière, accélérateur ou coworking"]),
+    ("Phase 1 - Analyse et validation de l'idée", [
+        ("Étude de marché : clients cibles, concurrence, tendances",
+         "Quels sont les 3 types de clients que tu vises en priorité ?"),
+        ("Affiner l'idée avec l'aide de l'IA",
+         "Qu'est-ce qui rend ton idée différente de ce qui existe déjà ?"),
+        ("Décider : poursuivre, adapter ou abandonner",
+         "Quelles informations as-tu collectées pour prendre ta décision ?"),
+    ]),
+    ("Phase 2 - Business plan", [
+        ("Construire le modèle économique (revenus, coûts, prix, valeur)",
+         "Comment vas-tu gagner de l'argent concrètement ?"),
+        ("Rédiger le business plan complet (prévisionnel, stratégie, organisation)",
+         "Quelle section du business plan te semble la plus difficile ?"),
+        ("Préparer le pitch pour convaincre partenaires et investisseurs",
+         "En une phrase, peux-tu présenter ton projet ?"),
+    ]),
+    ("Phase 3 - Accompagnement et formation", [
+        ("Formations : gestion, finance, marketing, droit, numérique",
+         "Quelle compétence te manque le plus aujourd'hui ?"),
+        ("Mentorat : échanges avec des entrepreneurs expérimentés",
+         "Quel type de mentor t'aiderait le plus ? (métier, expérience...)"),
+        ("Constituer son réseau (fournisseurs, clients, investisseurs)",
+         "Qui sont les 3 premières personnes utiles de ton réseau actuel ?"),
+    ]),
+    ("Phase 4 - Mise en place opérationnelle", [
+        ("Formalisation juridique : choix du statut, RCCM, NIF",
+         "Quelle forme juridique envisages-tu pour ton entreprise ?"),
+        ("Identité visuelle, site web, outils de communication",
+         "Comment veux-tu que les clients te reconnaissent et te retrouvent ?"),
+        ("Ressources : local, matériel, premiers financements",
+         "Quelle est ta première dépense vraiment indispensable ?"),
+    ]),
+    ("Phase 5 - Lancement et après-incubation", [
+        ("Lancement avec tests pilotes sur le marché",
+         "Quel petit test peux-tu lancer rapidement avec peu de moyens ?"),
+        ("Poursuite : pépinière, accélérateur ou coworking",
+         "De quel accompagnement après-incubation as-tu le plus besoin ?"),
+    ]),
 ]
 
+# ---------- MOTEUR DE RÉPONSE DE L'IA (par mots-clés) ----------
+REGLES_IA = [
+    (["argent", "finance", "fonds", "capital", "prêt", "pret", "budget",
+      "fcfa", "coût", "cout", "cher", "moyens"],
+     "💰 **La finance d'abord :** commence avec le minimum viable. Liste tes 3 premières "
+     "dépenses indispensables, coupe le reste. Au Tchad, plusieurs options existent : "
+     "tontine ou épagner solidaire, microfinance locale, concours d'entrepreneuriat, "
+     "et bientôt les banques quand ton dossier sera bancable. Un projet qui démarre "
+     "petit mais génère des revenus attire les financeurs."),
+
+    (["client", "vente", "vendre", "marché", "marche", "acheter", "demande"],
+     "🎯 **Trouver ses clients :** commence par les clients qui ont le problème le "
+     "plus urgent. Va à leur rencontre directement (marchés, quartiers, WhatsApp). "
+     "Pose une seule question : « Qu'est-ce qui t'empêche de... ? ». Vends avant "
+     "d'avoir tout construit — la prévente valide ton marché sans investir."),
+
+    (["peur", "stress", "échouer", "echouer", "risque", "oser", "confiance",
+      "doute", "incapable"],
+     "💛 **La peur est normale :** tous les entrepreneurs connus ont douté au début. "
+     "L'échec n'est pas la fin : c'est une donnée qui te dit quoi ajuster. Réduis "
+     "le risque : teste petit, apprends vite, répète. Chaque étape que tu coches ici "
+     "est une victoire réelle."),
+
+    (["temps", "occupé", "emploi", "horaire", "disponible"],
+     "⏰ **Gérer son temps :** tu n'as pas besoin de 8h par jour. 1h concentrée "
+     "chaque jour sur UNE action concrète fait avancer un projet énormément. "
+     "Bloque un créneau fixe (ex: 19h-20h) et protège-le comme un rendez-vous "
+     "important."),
+
+    (["famille", "entourage", "conjoint", "mari", "parents", "amis"],
+     "👨‍👩‍👧 **L'entourage :** la meilleure stratégie, c'est les résultats visibles. "
+     "Ne cherche pas à convaincre par les mots : montre les petites victoires "
+     "(premier client, premier chiffre). Implique un membre de la famille dans "
+     "une tâche concrète — on soutient mieux ce qu'on a aidé à construire."),
+
+    (["papier", "formalité", "formalités", "rccm", "impôt", "impot",
+      "administration", "statut", "legal", "légal"],
+     "📄 **Les formalités :** ne les reporte pas trop — une entreprise formalisée "
+     "peut ouvrir un compte bancaire, facturer, et accéder aux financements. Au "
+     "Tchad : choisis ta forme juridique, immatricule-toi au RCCM et obtiens ton "
+     "NIF auprès des impôts. La Phase 4 de ton parcours te guidera pas à pas."),
+
+    (["expérience", "experience", "compétence", "competence", "savoir",
+      "formation", "diplôme"],
+     "📚 **Compétences :** tu n'as pas besoin de tout savoir — il faut savoir "
+     "apprendre. Identifie LA compétence qui bloque le plus (souvent : vente ou "
+     "gestion), et travaille uniquement celle-là ce mois-ci. Le mentorat de la "
+     "Phase 3 te connectera à des expériences complémentaires."),
+
+    (["concurrence", "concurrent", "déjà", "deja", "copier", "copie"],
+     "⚔️ **La concurrence est une bonne nouvelle :** elle prouve qu'il y a un "
+     "marché ! Ta différence peut être le prix, la qualité, la proximité, le "
+     "service ou la spécialisation. Analyse 2-3 concurrents : que font-ils bien ? "
+     "Que négligent-ils ? C'est là que tu gagneras."),
+
+    (["équipe", "equipe", "associé", "associer", "partenaire", "seul"],
+     "🤝 **On est plus fort à plusieurs :** repère quelqu'un qui a les compétences "
+     "que tu n'as pas (souvent technique + commercial). Testez une collaboration "
+     "sur un petit projet avant de vous engager. Si tu es seul pour l'instant : "
+     "c'est OK, beaucoup d'entreprises ont démarré avec une seule personne."),
+
+    (["internet", "connexion", "réseau social", "whatsapp", "publicité",
+      "marketing", "communication"],
+     "📱 **La visibilité :** au Tchad, WhatsApp et Facebook sont des canaux "
+     "puissants et économiques. Une page propre, des photos réelles de ton produit, "
+     "des témoignages clients — c'est suffisant pour démarrer. Publie régulièrement, "
+     "même une fois par semaine."),
+]
+
+REPONSE_DEFAUT = (
+    "🤔 **Merci pour ta question !** Voici comment avancer : découpe ta préoccupation "
+    "en une petite action concrète à faire cette semaine. Si c'est un blocage "
+    "financier, parle-en en utilisant des mots comme « argent » ou « budget » ; "
+    "si c'est la peur d'échouer, dis « peur » — je suis là pour ça. Qu'est-ce qui "
+    "te préoccupe le plus en ce moment ?")
+
+def reponse_ia(message, titre_etape):
+    """Cherche le mot-clé de la préoccupation et renvoie la réponse adaptée."""
+    texte = message.lower()
+    for mots_clefs, reponse in REGLES_IA:
+        if any(mot in texte for mot in mots_clefs):
+            return reponse + f"\n\n📌 *(Étape concernée : {titre_etape})*"
+    return REPONSE_DEFAUT + f"\n\n📌 *(Étape concernée : {titre_etape})*"
+
+def envoyer_message(i, j, titre_etape):
+    """Callback du bouton Envoyer : lit la question, génère la réponse, vide le champ."""
+    cle_champ = f"q_{i}_{j}"
+    cle_chat = f"chat_{i}_{j}"
+    message = st.session_state.get(cle_champ, "").strip()
+    if message:
+        st.session_state.setdefault(cle_chat, []).append(
+            (message, reponse_ia(message, titre_etape)))
+        st.session_state[cle_champ] = ""
+
+# ---------- FORMULES ----------
 FORMULES = {
     "1 mois - 5 000 F": "5 000 F",
     "3 mois - 12 500 F": "12 500 F",
@@ -352,7 +466,6 @@ if page == "🏠 Accueil":
 elif page == "🎯 Diagnostic":
     st.title("🎯 Diagnostic du projet")
 
-    # ---- ÉTAPE 1 : choix du stade ----
     stade = st.radio("Quel est le stade de ton projet ?", list(DIAGNOSTICS.keys()),
                      format_func=lambda k: DIAGNOSTICS[k]["label"],
                      index=list(DIAGNOSTICS.keys()).index(st.session_state.stade)
@@ -382,7 +495,6 @@ elif page == "🎯 Diagnostic":
 
     st.divider()
 
-    # ---- ÉTAPE 2 : choix du domaine (NOUVEAU) ----
     st.subheader("🏭 Dans quel domaine veux-tu entreprendre ?")
     st.selectbox("Choisis ton domaine d'activité", list(DOMAINES.keys()),
                  key="diag_domaine")
@@ -395,7 +507,6 @@ elif page == "🎯 Diagnostic":
 
     st.divider()
 
-    # ---- ÉTAPE 3 : les 3 questions de l'IA (bug corrigé) ----
     st.subheader("🤖 Pour affiner ton diagnostic, l'IA a besoin de toi")
 
     for i, question in enumerate(infos["questions"]):
@@ -406,7 +517,6 @@ elif page == "🎯 Diagnostic":
     toutes_repondues = all(reponses) and domaine is not None
 
     if toutes_repondues:
-        # ---- ÉTAPE 4 : la synthèse structurée générée par l'IA ----
         with st.spinner("🤖 L'IA structure ton diagnostic..."):
             time.sleep(1.5)
 
@@ -427,8 +537,8 @@ elif page == "🎯 Diagnostic":
 
 **🧭 Premier conseil de l'IA :** {infos_domaine["conseil"]}
 
-**➡️ Prochaine étape recommandée :** valider la Phase 1 (Admission) de ton parcours
-puis attaquer l'étude de marché de la Phase 2.
+**➡️ Prochaine étape recommandée :** l'étude de marché de la Phase 1
+de ton parcours (« Analyse et validation de l'idée »).
         """)
         st.success("✅ Diagnostic complet et sauvegardé ! Clique sur « Suivant ».")
     else:
@@ -465,10 +575,37 @@ elif page == "🗺️ Mon parcours":
         st.warning("⚠️ Va d'abord à la page **Abonnement** pour activer ton accès.")
     else:
         st.title(f"🗺️ Mon parcours ({st.session_state.duree} mois)")
-        for i, (titre, etapes) in enumerate(PHASES):
-            with st.expander(f"**{titre}**"):
-                for j, etape in enumerate(etapes):
-                    st.checkbox(etape, key=f"etape_{i}_{j}")
+        st.caption("💡 Coche une étape : ton mentor IA te pose une question et "
+                   "répond à tes préoccupations juste en dessous.")
+
+        for i, (titre_phase, etapes) in enumerate(PHASES):
+            validees_phase = sum(
+                1 for j in range(len(etapes))
+                if st.session_state.get(f"etape_{i}_{j}", False))
+            with st.expander(
+                    f"**{titre_phase}** — {validees_phase}/{len(etapes)} étapes"):
+                for j, (etape, question_ia) in enumerate(etapes):
+                    cochee = st.checkbox(etape, key=f"etape_{i}_{j}")
+
+                    if cochee:
+                        # ---- LE MENTOR IA PREND LE RELAIS ----
+                        st.markdown(
+                            f"🤖 **Ton mentor IA :** _{question_ia}_")
+                        st.text_input("Ta réponse ou ta préoccupation :",
+                                      key=f"q_{i}_{j}",
+                                      placeholder="Ex: j'ai peur de manquer "
+                                                  "d'argent pour démarrer...")
+                        st.button("📩 Envoyer à l'IA",
+                                  key=f"btn_{i}_{j}",
+                                  on_click=envoyer_message,
+                                  args=(i, j, etape))
+
+                        # Affichage de la conversation
+                        for question, reponse in st.session_state.get(
+                                f"chat_{i}_{j}", []):
+                            st.markdown(
+                                f"> **Toi :** {question}")
+                            st.markdown(reponse)
 
     boutons_navigation(index_page)
 
