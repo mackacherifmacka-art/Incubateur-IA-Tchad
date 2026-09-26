@@ -4,8 +4,19 @@ import hashlib
 import os
 import time
 
+# ---- IA GÉNÉRATIVE (Google Gemini) ----
+# Si la bibliothèque n'est pas installée ou la clé absente,
+# l'app fonctionne quand même avec le moteur de règles.
+try:
+    import google.generativeai as genai
+    GENAI_OK = True
+except ImportError:
+    GENAI_OK = False
+
 # ============================================
-# INCUBATEUR IA TCHAD - v6
+# INCUBATEUR IA TCHAD - v7
+# Coach IA GÉNÉRATIVE (Google Gemini) : réponses
+# professionnelles personnalisées + moteur de secours hors-ligne
 # - Phase Admission SUPPRIMÉE (on commence par
 #   "Analyse et validation de l'idée")
 # - Quand l'entrepreneur coche une étape, l'IA
@@ -271,98 +282,139 @@ PHASES = [
     ]),
 ]
 
-# ---------- MOTEUR DE RÉPONSE DE L'IA (par mots-clés) ----------
+# ---------- COACH IA GÉNÉRATIVE (Gemini) ----------
+PROMPT_COACH = """
+Tu es "Coach IA", le mentor principal d'un incubateur d'entreprises numérique
+au Tchad, reconnu comme LA référence des entrepreneurs tchadiens. Tu combines
+l'expertise d'un incubateur professionnel : business model, étude de marché,
+prévisionnel financier, formalisation juridique tchadienne (RCCM, NIF, impôts,
+formes juridiques), marketing adapté au marché tchadien, et développement
+personnel de l'entrepreneur.
+
+TES PRINCIPES :
+1. PÉDAGOGIE avant tout : chaque réponse doit faire apprendre quelque chose.
+   Explique le "pourquoi", pas seulement le "comment".
+2. STRUCTURE systématique de tes réponses :
+   🧠 Une explication courte et claire du concept
+   🇹🇩 Un exemple concret adapté au contexte tchadien (marchés de N'Djamena,
+      Mobile Money, agriculture, commerce transfrontalier, jeunesse...)
+   ✅ Une action concrète à réaliser cette semaine
+   ❓ Une question qui pousse l'entrepreneur à réfléchir et répondre
+3. TON : encourageant, respectueux, professionnel — jamais condescendant.
+   Félicite les progrès. Normalise les difficultés.
+4. Si la question sort du cadre entrepreneurial, réponds brièvement puis
+   recadre vers son projet.
+5. Longueur : 150 à 250 mots maximum. Français simple et clair.
+6. Tu connais le stade du projet, le domaine et l'étape en cours : adapte
+   TOUJOURS tes conseils à ce contexte précis.
+"""
+
+def reponse_ia_genai(message, contexte):
+    """Pose la question de l'entrepreneur à Gemini. Renvoie None en cas d'échec."""
+    if not GENAI_OK:
+        return None
+    try:
+        cle = st.secrets["GEMINI_API_KEY"]
+    except Exception:
+        return None
+    try:
+        genai.configure(api_key=cle)
+        model = genai.GenerativeModel("gemini-1.5-flash",
+                                      system_instruction=PROMPT_COACH)
+        question_complete = (f"CONTEXTE DE L'ENTREPRENEUR :\n{contexte}\n\n"
+                             f"SON MESSAGE :\n{message}")
+        reponse = model.generate_content(question_complete)
+        return reponse.text
+    except Exception:
+        return None
+
+# ---------- MOTEUR DE SECOURS (par mots-clés, si pas d'IA générative) ----------
 REGLES_IA = [
     (["argent", "finance", "fonds", "capital", "prêt", "pret", "budget",
       "fcfa", "coût", "cout", "cher", "moyens"],
      "💰 **La finance d'abord :** commence avec le minimum viable. Liste tes 3 premières "
-     "dépenses indispensables, coupe le reste. Au Tchad, plusieurs options existent : "
-     "tontine ou épagner solidaire, microfinance locale, concours d'entrepreneuriat, "
-     "et bientôt les banques quand ton dossier sera bancable. Un projet qui démarre "
-     "petit mais génère des revenus attire les financeurs."),
+     "dépenses indispensables, coupe le reste. Au Tchad : tontine, microfinance locale, "
+     "concours d'entrepreneuriat, puis banques quand ton dossier sera bancable."),
 
     (["client", "vente", "vendre", "marché", "marche", "acheter", "demande"],
-     "🎯 **Trouver ses clients :** commence par les clients qui ont le problème le "
-     "plus urgent. Va à leur rencontre directement (marchés, quartiers, WhatsApp). "
-     "Pose une seule question : « Qu'est-ce qui t'empêche de... ? ». Vends avant "
-     "d'avoir tout construit — la prévente valide ton marché sans investir."),
+     "🎯 **Trouver ses clients :** commence par ceux qui ont le problème le plus urgent. "
+     "Va à leur rencontre (marchés, quartiers, WhatsApp). La prévente valide ton marché "
+     "sans investir."),
 
     (["peur", "stress", "échouer", "echouer", "risque", "oser", "confiance",
       "doute", "incapable"],
-     "💛 **La peur est normale :** tous les entrepreneurs connus ont douté au début. "
-     "L'échec n'est pas la fin : c'est une donnée qui te dit quoi ajuster. Réduis "
-     "le risque : teste petit, apprends vite, répète. Chaque étape que tu coches ici "
-     "est une victoire réelle."),
+     "💛 **La peur est normale :** tous les grands entrepreneurs ont douté. Teste petit, "
+     "apprends vite, répète. Chaque étape cochée est une victoire réelle."),
 
     (["temps", "occupé", "emploi", "horaire", "disponible"],
-     "⏰ **Gérer son temps :** tu n'as pas besoin de 8h par jour. 1h concentrée "
-     "chaque jour sur UNE action concrète fait avancer un projet énormément. "
-     "Bloque un créneau fixe (ex: 19h-20h) et protège-le comme un rendez-vous "
-     "important."),
+     "⏰ **Gérer son temps :** 1h concentrée par jour sur UNE action concrète suffit. "
+     "Bloque un créneau fixe quotidien et protège-le."),
 
     (["famille", "entourage", "conjoint", "mari", "parents", "amis"],
-     "👨‍👩‍👧 **L'entourage :** la meilleure stratégie, c'est les résultats visibles. "
-     "Ne cherche pas à convaincre par les mots : montre les petites victoires "
-     "(premier client, premier chiffre). Implique un membre de la famille dans "
-     "une tâche concrète — on soutient mieux ce qu'on a aidé à construire."),
+     "👨‍👩‍👧 **L'entourage :** convaincs par les résultats visibles, pas par les mots. "
+     "Implique un proche dans une tâche concrète."),
 
     (["papier", "formalité", "formalités", "rccm", "impôt", "impot",
       "administration", "statut", "legal", "légal"],
-     "📄 **Les formalités :** ne les reporte pas trop — une entreprise formalisée "
-     "peut ouvrir un compte bancaire, facturer, et accéder aux financements. Au "
-     "Tchad : choisis ta forme juridique, immatricule-toi au RCCM et obtiens ton "
-     "NIF auprès des impôts. La Phase 4 de ton parcours te guidera pas à pas."),
+     "📄 **Les formalités :** ne les reporte pas. RCCM + NIF = compte bancaire, "
+     "factures, financements. La Phase 4 te guide pas à pas."),
 
     (["expérience", "experience", "compétence", "competence", "savoir",
       "formation", "diplôme"],
-     "📚 **Compétences :** tu n'as pas besoin de tout savoir — il faut savoir "
-     "apprendre. Identifie LA compétence qui bloque le plus (souvent : vente ou "
-     "gestion), et travaille uniquement celle-là ce mois-ci. Le mentorat de la "
-     "Phase 3 te connectera à des expériences complémentaires."),
+     "📚 **Compétences :** travaille UNE seule compétence bloquante ce mois-ci "
+     "(souvent la vente ou la gestion)."),
 
     (["concurrence", "concurrent", "déjà", "deja", "copier", "copie"],
-     "⚔️ **La concurrence est une bonne nouvelle :** elle prouve qu'il y a un "
-     "marché ! Ta différence peut être le prix, la qualité, la proximité, le "
-     "service ou la spécialisation. Analyse 2-3 concurrents : que font-ils bien ? "
-     "Que négligent-ils ? C'est là que tu gagneras."),
+     "⚔️ **La concurrence prouve le marché.** Ta différence : prix, qualité, "
+     "proximité, service ou spécialisation."),
 
     (["équipe", "equipe", "associé", "associer", "partenaire", "seul"],
-     "🤝 **On est plus fort à plusieurs :** repère quelqu'un qui a les compétences "
-     "que tu n'as pas (souvent technique + commercial). Testez une collaboration "
-     "sur un petit projet avant de vous engager. Si tu es seul pour l'instant : "
-     "c'est OK, beaucoup d'entreprises ont démarré avec une seule personne."),
+     "🤝 **Plus fort à plusieurs :** teste une collaboration sur un petit projet "
+     "avant de t'engager. Seul, c'est OK aussi au départ."),
 
     (["internet", "connexion", "réseau social", "whatsapp", "publicité",
       "marketing", "communication"],
-     "📱 **La visibilité :** au Tchad, WhatsApp et Facebook sont des canaux "
-     "puissants et économiques. Une page propre, des photos réelles de ton produit, "
-     "des témoignages clients — c'est suffisant pour démarrer. Publie régulièrement, "
-     "même une fois par semaine."),
+     "📱 **Visibilité :** WhatsApp et Facebook sont puissants au Tchad. Photos réelles, "
+     "témoignages, publication régulière — suffisant pour démarrer."),
 ]
 
 REPONSE_DEFAUT = (
-    "🤔 **Merci pour ta question !** Voici comment avancer : découpe ta préoccupation "
-    "en une petite action concrète à faire cette semaine. Si c'est un blocage "
-    "financier, parle-en en utilisant des mots comme « argent » ou « budget » ; "
-    "si c'est la peur d'échouer, dis « peur » — je suis là pour ça. Qu'est-ce qui "
-    "te préoccupe le plus en ce moment ?")
+    "🤔 Merci pour ta question ! Détaille-la un peu plus (parle d'argent, de "
+    "clients, de peur, de temps, de famille ou de formalités) pour que je puisse "
+    "te guider précisément.")
 
 def reponse_ia(message, titre_etape):
-    """Cherche le mot-clé de la préoccupation et renvoie la réponse adaptée."""
     texte = message.lower()
     for mots_clefs, reponse in REGLES_IA:
         if any(mot in texte for mot in mots_clefs):
-            return reponse + f"\n\n📌 *(Étape concernée : {titre_etape})*"
-    return REPONSE_DEFAUT + f"\n\n📌 *(Étape concernée : {titre_etape})*"
+            return reponse + f"\n\n📌 *(Étape : {titre_etape})*"
+    return REPONSE_DEFAUT + f"\n\n📌 *(Étape : {titre_etape})*"
+
+def construire_contexte(titre_etape):
+    """Rassemble tout ce que l'IA doit savoir sur l'entrepreneur."""
+    stade = st.session_state.get("stade")
+    label_stade = DIAGNOSTICS.get(stade, {}).get("label", "non précisé")
+    domaine = st.session_state.get("diag_domaine") or "non précisé"
+    duree = st.session_state.get("duree", 0)
+    r1 = st.session_state.get("diag_0", "—")
+    r2 = st.session_state.get("diag_1", "—")
+    return (f"Prénom : {st.session_state.get('prenom', 'entrepreneur')}\n"
+            f"Stade du projet : {label_stade} (parcours de {duree} mois)\n"
+            f"Domaine d'activité : {domaine}\n"
+            f"Étape en cours : {titre_etape}\n"
+            f"Diagnostic : problème = {r1} | clients visés = {r2}")
 
 def envoyer_message(i, j, titre_etape):
-    """Callback du bouton Envoyer : lit la question, génère la réponse, vide le champ."""
+    """Envoi le message : IA générative d'abord, moteur de secours ensuite."""
     cle_champ = f"q_{i}_{j}"
     cle_chat = f"chat_{i}_{j}"
     message = st.session_state.get(cle_champ, "").strip()
     if message:
-        st.session_state.setdefault(cle_chat, []).append(
-            (message, reponse_ia(message, titre_etape)))
+        reponse = reponse_ia_genai(message, construire_contexte(titre_etape))
+        if reponse is None:
+            reponse = reponse_ia(message, titre_etape)  # secours
+            reponse += "\n\n_⚙️ (Mode hors-ligne : branche la clé Gemini pour le coach complet)_"
+        st.session_state.setdefault(cle_chat, []).append((message, reponse))
         st.session_state[cle_champ] = ""
 
 # ---------- FORMULES ----------
