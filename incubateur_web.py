@@ -5,10 +5,10 @@ import os
 import time
 
 # ============================================
-# INCUBATEUR IA TCHAD - v4
-# Nouveauté : le DIAGNOSTIC IA se lance
-# automatiquement après le choix du stade :
-# analyse + forces + risques + questions IA
+# INCUBATEUR IA TCHAD - v5
+# Corrections : bug des champs de réponse corrigé
+# Nouveautés : choix du DOMAINE d'activité +
+# synthèse structurée générée par l'IA
 # ============================================
 
 st.set_page_config(page_title="Incubateur IA Tchad", page_icon="🇹🇩")
@@ -95,7 +95,7 @@ init_db()
 # ---------- VALEURS PAR DÉFAUT ----------
 for cle, valeur in [("langue", None), ("prenom", ""), ("duree", 0),
                     ("abonnement", None), ("page", "🏠 Accueil"),
-                    ("stade", None)]:
+                    ("stade", None), ("diag_domaine", None)]:
     if cle not in st.session_state:
         st.session_state[cle] = valeur
 
@@ -105,6 +105,62 @@ T = {
                   "ar": "مرحباً بك في حاضنة المشاريع !"},
     "objectif": {"fr": "Transformons ton idée en projet finançable.",
                  "ar": "سنحوّل فكرتك إلى مشروع قابل للتمويل."}
+}
+
+# ---------- DOMAINES D'ACTIVITÉ ----------
+DOMAINES = {
+    "Agriculture / Élevage": {
+        "opportunites": ("Forte demande locale en produits vivriers ; possibilités "
+                         "d'export vers la CEMAC ; saison sèche = niche pour "
+                         "l'irrigation et l'agrobusiness."),
+        "conseil": "Commence petit avec un cycle court (légumes, volaille) pour générer des revenus rapidement."
+    },
+    "Commerce / Distribution": {
+        "opportunites": ("Déficit d'approvisionnement structuré dans plusieurs régions ; "
+                         "le commerce transfrontalier (Cameroun, Nigéria, Soudan) "
+                         "offre de bonnes marges."),
+        "conseil": "Identifie un produit à forte rotation et sécurise ta chaîne d'approvisionnement avant d'investir lourd."
+    },
+    "Transformation agroalimentaire": {
+        "opportunites": ("Transformation locale = valeur ajoutée et moins de pertes "
+                         "(sésame, arachide, mangue...) ; la demande en produits "
+                         "transformés locaux dépasse l'offre."),
+        "conseil": "Commence par un produit unique maîtrisé, valide la qualité auprès de 10 clients réguliers."
+    },
+    "Services / Numérique": {
+        "opportunites": ("Croissance rapide du mobile et du mobile money ; besoins "
+                         "énormes en services digitaux pour PME (comptabilité, "
+                         "visibilité, formation)."),
+        "conseil": "Vends d'abord une prestation simple (ex: gestion de page Facebook pour commerçants) avant de créer un produit complexe."
+    },
+    "Artisanat / Mode": {
+        "opportunites": ("Fierté du made in Tchad ; touristes et diaspora achètent "
+                         "le local ; les tenues traditionnelles ont un marché "
+                         "constant."),
+        "conseil": "Travaille ton identité visuelle et documente tes créations avec de bonnes photos — c'est ta vitrine."
+    },
+    "Transport / Logistique": {
+        "opportunites": ("Déplacements permanents entre N'Djamena, Moundou, Sarh "
+                         "et l'extérieur ; manque de solutions fiables de "
+                         "livraison pour le e-commerce naissant."),
+        "conseil": "Commence sur une seule ligne bien connue, avec un carnet de clients fidèles avant d'étendre."
+    },
+    "Éducation / Formation": {
+        "opportunites": ("Jeunesse majoritaire et soif d'apprentissage ; parents "
+                         "prêts à payer pour la réussite scolaire ; formations "
+                         "professionnelles très demandées."),
+        "conseil": "Teste ta méthode avec un petit groupe payant avant de louer des locaux."
+    },
+    "Santé / Bien-être": {
+        "opportunites": ("Besoins en pharmacies de proximité, nutrition, suivi "
+                         "médical ; la santé préventive est un marché émergent "
+                         "en milieu urbain."),
+        "conseil": "Respecte impérativement la réglementation sanitaire — la confiance est ton premier capital."
+    },
+    "Autre domaine": {
+        "opportunites": "Chaque secteur a ses opportunités : l'étude de marché de la Phase 2 les révèlera.",
+        "conseil": "Décris précisément ton activité dans tes réponses pour un accompagnement sur mesure."
+    }
 }
 
 # ---------- DIAGNOSTIC IA PAR STADE ----------
@@ -120,7 +176,7 @@ DIAGNOSTICS = {
         "forces": ["Fraîcheur et créativité de l'idée",
                    "Aucun coût engagé pour l'instant",
                    "Possibilité de pivoter facilement"],
-        "risques": ["Idee pas encore validée par le marché",
+        "risques": ["Idée pas encore validée par le marché",
                     "Manque de données concrètes",
                     "Risque de rester bloqué dans la réflexion"],
         "questions": [
@@ -296,14 +352,14 @@ if page == "🏠 Accueil":
 elif page == "🎯 Diagnostic":
     st.title("🎯 Diagnostic du projet")
 
+    # ---- ÉTAPE 1 : choix du stade ----
     stade = st.radio("Quel est le stade de ton projet ?", list(DIAGNOSTICS.keys()),
                      format_func=lambda k: DIAGNOSTICS[k]["label"],
                      index=list(DIAGNOSTICS.keys()).index(st.session_state.stade)
                      if st.session_state.stade in DIAGNOSTICS else 0)
 
-    # ---- LE TRAVAIL DE L'IA COMMENCE ----
     with st.spinner("🤖 L'IA analyse ton projet..."):
-        time.sleep(1.5)   # petite pause pour l'effet "analyse en cours"
+        time.sleep(1)
 
     infos = DIAGNOSTICS[stade]
     st.session_state.stade = stade
@@ -325,21 +381,58 @@ elif page == "🎯 Diagnostic":
             st.markdown(f"- {r}")
 
     st.divider()
+
+    # ---- ÉTAPE 2 : choix du domaine (NOUVEAU) ----
+    st.subheader("🏭 Dans quel domaine veux-tu entreprendre ?")
+    st.selectbox("Choisis ton domaine d'activité", list(DOMAINES.keys()),
+                 key="diag_domaine")
+
+    domaine = st.session_state.diag_domaine
+    if domaine in DOMAINES:
+        infos_domaine = DOMAINES[domaine]
+        st.info(f"**Opportunités du secteur « {domaine} » au Tchad :** "
+                + infos_domaine["opportunites"])
+
+    st.divider()
+
+    # ---- ÉTAPE 3 : les 3 questions de l'IA (bug corrigé) ----
     st.subheader("🤖 Pour affiner ton diagnostic, l'IA a besoin de toi")
 
-    toutes_repondues = True
     for i, question in enumerate(infos["questions"]):
-        cle = f"diag_{i}"
-        reponse = st.text_input(f"**{i + 1}.** {question}", key=cle,
-                                value=st.session_state.get(cle, ""))
-        st.session_state[cle] = reponse
-        if not reponse.strip():
-            toutes_repondues = False
+        st.text_input(f"**{i + 1}.** {question}", key=f"diag_{i}")
+
+    reponses = [st.session_state.get(f"diag_{i}", "").strip()
+                for i in range(len(infos["questions"]))]
+    toutes_repondues = all(reponses) and domaine is not None
 
     if toutes_repondues:
-        st.success("✅ Diagnostic complet ! L'IA a tout ce qu'il faut pour te guider.")
+        # ---- ÉTAPE 4 : la synthèse structurée générée par l'IA ----
+        with st.spinner("🤖 L'IA structure ton diagnostic..."):
+            time.sleep(1.5)
+
+        st.divider()
+        st.subheader("📋 Ton diagnostic structuré par l'IA")
+        st.markdown(f"""
+**👤 Porteur de projet :** {st.session_state.prenom}
+**🏭 Domaine :** {domaine}
+**📍 Stade :** {infos["label"]} → parcours de **{infos["duree"]} mois**
+
+**🔍 Problème identifié :** {reponses[0]}
+
+**🎯 Clients visés :** {reponses[1]}
+
+**💪 Atout du porteur :** {reponses[2]}
+
+**🌟 Opportunités du secteur :** {infos_domaine["opportunites"]}
+
+**🧭 Premier conseil de l'IA :** {infos_domaine["conseil"]}
+
+**➡️ Prochaine étape recommandée :** valider la Phase 1 (Admission) de ton parcours
+puis attaquer l'étude de marché de la Phase 2.
+        """)
+        st.success("✅ Diagnostic complet et sauvegardé ! Clique sur « Suivant ».")
     else:
-        st.info("Réponds aux questions de l'IA (ou laisse vide et clique Passer).")
+        st.info("Réponds aux questions de l'IA (ou clique Passer pour plus tard).")
 
     boutons_navigation(index_page)
 
