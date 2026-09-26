@@ -3,30 +3,102 @@ import sqlite3
 import hashlib
 import os
 import time
+import datetime
+
+# ============================================
+# INCUBATEUR IA TCHAD - v9 (design professionnel)
+# Parcours réorganisé selon 9 étapes de coaching
+# professionnel (sans nom d'organisation) :
+# chaque étape = objectif + livrables + coach IA
+# qui analyse chaque réponse. Fin d'incubation =
+# projet bancable complet + budget + attestation.
+# ============================================
+
+st.set_page_config(page_title="Incubateur IA Tchad", page_icon="🇹🇩",
+                   layout="centered", initial_sidebar_state="expanded")
+
+# ==================== DESIGN ====================
+st.markdown("""
+<style>
+    /* Fond général */
+    .stApp {
+        background: linear-gradient(180deg, #f7f9fc 0%, #eef2f7 100%);
+    }
+    /* Titres */
+    h1, h2, h3 {
+        font-family: 'Segoe UI', Helvetica, Arial, sans-serif;
+        color: #002664;
+    }
+    /* Bannière héro */
+    .hero {
+        background: linear-gradient(135deg, #002664 0%, #1a5276 60%, #2e86c1 100%);
+        color: white;
+        padding: 2.2rem 1.8rem;
+        border-radius: 18px;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 8px 24px rgba(0, 38, 100, 0.25);
+    }
+    .hero h1 { color: white !important; margin: 0; font-size: 1.9rem; }
+    .hero p { color: #dbe9f5; font-size: 1.05rem; margin-top: 0.6rem; }
+    .badge {
+        display: inline-block;
+        background: #FECB00;
+        color: #002664;
+        font-weight: bold;
+        padding: 0.25rem 0.9rem;
+        border-radius: 999px;
+        font-size: 0.8rem;
+        margin-bottom: 0.8rem;
+    }
+    /* Cartes */
+    .carte {
+        background: white;
+        border-radius: 14px;
+        padding: 1.1rem 1.3rem;
+        margin-bottom: 0.9rem;
+        box-shadow: 0 2px 10px rgba(0, 38, 100, 0.08);
+        border-left: 5px solid #1a5276;
+    }
+    .carte-or   { border-left-color: #FECB00; }
+    .carte-rouge{ border-left-color: #C60C30; }
+    .carte-vert { border-left-color: #1e8449; }
+    .carte h4 { color: #002664; margin: 0 0 0.4rem 0; }
+    .carte p  { margin: 0; color: #444; }
+    /* Boutons */
+    .stButton > button {
+        border-radius: 10px !important;
+        font-weight: 600 !important;
+    }
+    /* Barre latérale */
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #002664 0%, #1a3a6b 100%);
+    }
+    [data-testid="stSidebar"] * { color: #eaf2fa !important; }
+    [data-testid="stSidebar"] .stButton > button {
+        background: transparent !important;
+        border: 1px solid #5a7ba6 !important;
+        color: #eaf2fa !important;
+    }
+    /* Pied de page */
+    .pied {
+        text-align: center;
+        color: #7f8c9b;
+        font-size: 0.8rem;
+        margin-top: 3rem;
+        padding-top: 1rem;
+        border-top: 1px solid #d5dee8;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+NOM_DB = "incubateur.db"
 
 # ---- IA GÉNÉRATIVE (Google Gemini) ----
-# Si la bibliothèque n'est pas installée ou la clé absente,
-# l'app fonctionne quand même avec le moteur de règles.
 try:
     import google.generativeai as genai
     GENAI_OK = True
 except ImportError:
     GENAI_OK = False
-
-# ============================================
-# INCUBATEUR IA TCHAD - v7
-# Coach IA GÉNÉRATIVE (Google Gemini) : réponses
-# professionnelles personnalisées + moteur de secours hors-ligne
-# - Phase Admission SUPPRIMÉE (on commence par
-#   "Analyse et validation de l'idée")
-# - Quand l'entrepreneur coche une étape, l'IA
-#   DISCUTE avec lui : question + réponses aux
-#   préoccupations (mini-chat intégré)
-# ============================================
-
-st.set_page_config(page_title="Incubateur IA Tchad", page_icon="🇹🇩")
-
-NOM_DB = "incubateur.db"
 
 # ---------- BASE DE DONNÉES ----------
 def init_db():
@@ -80,7 +152,7 @@ def sauvegarder(username):
         c.execute("INSERT OR REPLACE INTO data VALUES (?, ?, ?)",
                   (username, cle, str(st.session_state.get(cle))))
     for cle, valeur in st.session_state.items():
-        if cle.startswith("etape_") or cle.startswith("diag_"):
+        if cle.startswith(("etape_", "diag_", "synthese_")):
             c.execute("INSERT OR REPLACE INTO data VALUES (?, ?, ?)",
                       (username, cle, str(valeur)))
     conn.commit()
@@ -91,6 +163,8 @@ def charger(username):
     c = conn.cursor()
     c.execute("SELECT cle, valeur FROM data WHERE username = ?", (username,))
     for cle, valeur in c.fetchall():
+        if cle.startswith(("chat_", "budget_")):
+            continue   # ces clés ne se restaurent pas (listes/widgets)
         if valeur == "True":
             st.session_state[cle] = True
         elif valeur == "False":
@@ -108,7 +182,8 @@ init_db()
 # ---------- VALEURS PAR DÉFAUT ----------
 for cle, valeur in [("langue", None), ("prenom", ""), ("duree", 0),
                     ("abonnement", None), ("page", "🏠 Accueil"),
-                    ("stade", None), ("diag_domaine", None)]:
+                    ("stade", None), ("diag_domaine", None),
+                    ("projet_final", "")]:
     if cle not in st.session_state:
         st.session_state[cle] = valeur
 
@@ -130,48 +205,40 @@ DOMAINES = {
     },
     "Commerce / Distribution": {
         "opportunites": ("Déficit d'approvisionnement structuré dans plusieurs régions ; "
-                         "le commerce transfrontalier (Cameroun, Nigéria, Soudan) "
-                         "offre de bonnes marges."),
+                         "le commerce transfrontalier offre de bonnes marges."),
         "conseil": "Identifie un produit à forte rotation et sécurise ta chaîne d'approvisionnement avant d'investir lourd."
     },
     "Transformation agroalimentaire": {
         "opportunites": ("Transformation locale = valeur ajoutée et moins de pertes "
-                         "(sésame, arachide, mangue...) ; la demande en produits "
-                         "transformés locaux dépasse l'offre."),
+                         "(sésame, arachide, mangue...) ; la demande dépasse l'offre."),
         "conseil": "Commence par un produit unique maîtrisé, valide la qualité auprès de 10 clients réguliers."
     },
     "Services / Numérique": {
         "opportunites": ("Croissance rapide du mobile et du mobile money ; besoins "
-                         "énormes en services digitaux pour PME (comptabilité, "
-                         "visibilité, formation)."),
-        "conseil": "Vends d'abord une prestation simple (ex: gestion de page Facebook pour commerçants) avant de créer un produit complexe."
+                         "énormes en services digitaux pour PME."),
+        "conseil": "Vends d'abord une prestation simple avant de créer un produit complexe."
     },
     "Artisanat / Mode": {
         "opportunites": ("Fierté du made in Tchad ; touristes et diaspora achètent "
-                         "le local ; les tenues traditionnelles ont un marché "
-                         "constant."),
-        "conseil": "Travaille ton identité visuelle et documente tes créations avec de bonnes photos — c'est ta vitrine."
+                         "le local."),
+        "conseil": "Travaille ton identité visuelle et documente tes créations avec de bonnes photos."
     },
     "Transport / Logistique": {
-        "opportunites": ("Déplacements permanents entre N'Djamena, Moundou, Sarh "
-                         "et l'extérieur ; manque de solutions fiables de "
-                         "livraison pour le e-commerce naissant."),
-        "conseil": "Commence sur une seule ligne bien connue, avec un carnet de clients fidèles avant d'étendre."
+        "opportunites": ("Déplacements permanents entre N'Djamena, Moundou, Sarh ; "
+                         "manque de solutions fiables de livraison."),
+        "conseil": "Commence sur une seule ligne bien connue, avec un carnet de clients fidèles."
     },
     "Éducation / Formation": {
-        "opportunites": ("Jeunesse majoritaire et soif d'apprentissage ; parents "
-                         "prêts à payer pour la réussite scolaire ; formations "
+        "opportunites": ("Jeunesse majoritaire et soif d'apprentissage ; formations "
                          "professionnelles très demandées."),
         "conseil": "Teste ta méthode avec un petit groupe payant avant de louer des locaux."
     },
     "Santé / Bien-être": {
-        "opportunites": ("Besoins en pharmacies de proximité, nutrition, suivi "
-                         "médical ; la santé préventive est un marché émergent "
-                         "en milieu urbain."),
+        "opportunites": ("Besoins en pharmacies de proximité, nutrition, suivi médical."),
         "conseil": "Respecte impérativement la réglementation sanitaire — la confiance est ton premier capital."
     },
     "Autre domaine": {
-        "opportunites": "Chaque secteur a ses opportunités : l'étude de marché de la Phase 1 les révèlera.",
+        "opportunites": "Chaque secteur a ses opportunités : l'étude terrain de l'Étape 1 les révèlera.",
         "conseil": "Décris précisément ton activité dans tes réponses pour un accompagnement sur mesure."
     }
 }
@@ -181,11 +248,10 @@ DIAGNOSTICS = {
     "idee": {
         "label": "J'ai juste une idée",
         "duree": 6,
-        "analyse": ("Ton projet est au stade de l'idée brute. C'est le moment le plus "
-                    "excitant... et le plus fragile : beaucoup d'idées meurent faute de "
-                    "structure. L'IA va d'abord t'aider à clarifier le problème que tu "
-                    "résolves et à vérifier que des clients en ont réellement besoin, "
-                    "avant tout investissement."),
+        "analyse": ("Ton projet est au stade de l'idée brute. Le plus grand risque à ce "
+                    "stade n'est pas le manque d'idées, mais l'absence de preuves de "
+                    "marché. Le parcours va d'abord t'aider à comprendre précisément ton "
+                    "client et son problème, avant toute dépense."),
         "forces": ["Fraîcheur et créativité de l'idée",
                    "Aucun coût engagé pour l'instant",
                    "Possibilité de pivoter facilement"],
@@ -201,10 +267,10 @@ DIAGNOSTICS = {
     "prototype": {
         "label": "J'ai un prototype ou un plan",
         "duree": 5,
-        "analyse": ("Tu as déjà transformé ton idée en quelque chose de concret : plan, "
-                    "maquette, prototype ou premiers tests. L'IA va maintenant t'aider à "
-                    "mesurer ce qui fonctionne, corriger ce qui coince, et structurer "
-                    "l'offre avant de passer à l'étude de marché approfondie."),
+        "analyse": ("Tu as déjà transformé ton idée en quelque chose de concret. "
+                    "L'accompagnement va maintenant mesurer ce qui fonctionne avec de "
+                    "vrais clients, corriger ce qui coince, et structurer l'offre "
+                    "avant de passer au modèle économique."),
         "forces": ["Idée déjà concrétisée",
                    "Premiers retours possibles",
                    "Vision claire du produit ou service"],
@@ -220,15 +286,15 @@ DIAGNOSTICS = {
     "lance": {
         "label": "Mon activité est déjà lancée",
         "duree": 3,
-        "analyse": ("Ton activité existe déjà : tu as des clients, des ventes, une "
-                    "réalité sur le terrain. L'IA va t'aider à structurer ce qui est "
-                    "déjà en place, professionnaliser ta gestion et préparer le dossier "
-                    "pour accéder au financement bancaire."),
+        "analyse": ("Ton activité existe déjà : tu as des clients et des ventes. "
+                    "L'accompagnement va professionnaliser ta gestion, sécuriser tes "
+                    "opérations et préparer le dossier pour accéder au financement "
+                    "bancaire."),
         "forces": ["Activité réelle avec des clients",
                    "Données concrètes à analyser",
                    "Crédibilité auprès des financeurs"],
         "risques": ["Gestion informelle des finances",
-                    "Pas de structure juridique formalisée",
+                    "Formalisation juridique incomplète",
                     "Croissance limitée par le manque de fonds"],
         "questions": [
             "Quel est ton chiffre d'affaires actuel (même approximatif) ?",
@@ -238,79 +304,174 @@ DIAGNOSTICS = {
     }
 }
 
-# ---------- LE PARCOURS (Admission supprimée) ----------
-# Chaque étape a maintenant sa QUESTION d'IA qui se
-# déclenche quand l'entrepreneur coche la case.
-PHASES = [
-    ("Phase 1 - Analyse et validation de l'idée", [
-        ("Étude de marché : clients cibles, concurrence, tendances",
-         "Quels sont les 3 types de clients que tu vises en priorité ?"),
-        ("Affiner l'idée avec l'aide de l'IA",
-         "Qu'est-ce qui rend ton idée différente de ce qui existe déjà ?"),
-        ("Décider : poursuivre, adapter ou abandonner",
-         "Quelles informations as-tu collectées pour prendre ta décision ?"),
-    ]),
-    ("Phase 2 - Business plan", [
-        ("Construire le modèle économique (revenus, coûts, prix, valeur)",
-         "Comment vas-tu gagner de l'argent concrètement ?"),
-        ("Rédiger le business plan complet (prévisionnel, stratégie, organisation)",
-         "Quelle section du business plan te semble la plus difficile ?"),
-        ("Préparer le pitch pour convaincre partenaires et investisseurs",
-         "En une phrase, peux-tu présenter ton projet ?"),
-    ]),
-    ("Phase 3 - Accompagnement et formation", [
-        ("Formations : gestion, finance, marketing, droit, numérique",
-         "Quelle compétence te manque le plus aujourd'hui ?"),
-        ("Mentorat : échanges avec des entrepreneurs expérimentés",
-         "Quel type de mentor t'aiderait le plus ? (métier, expérience...)"),
-        ("Constituer son réseau (fournisseurs, clients, investisseurs)",
-         "Qui sont les 3 premières personnes utiles de ton réseau actuel ?"),
-    ]),
-    ("Phase 4 - Mise en place opérationnelle", [
-        ("Formalisation juridique : choix du statut, RCCM, NIF",
-         "Quelle forme juridique envisages-tu pour ton entreprise ?"),
-        ("Identité visuelle, site web, outils de communication",
-         "Comment veux-tu que les clients te reconnaissent et te retrouvent ?"),
-        ("Ressources : local, matériel, premiers financements",
-         "Quelle est ta première dépense vraiment indispensable ?"),
-    ]),
-    ("Phase 5 - Lancement et après-incubation", [
-        ("Lancement avec tests pilotes sur le marché",
-         "Quel petit test peux-tu lancer rapidement avec peu de moyens ?"),
-        ("Poursuite : pépinière, accélérateur ou coworking",
-         "De quel accompagnement après-incubation as-tu le plus besoin ?"),
-    ]),
+# ---------- LES 9 ÉTAPES DU PARCOURS ----------
+# (inspiré d'un référentiel professionnel de coaching entrepreneurial)
+ETAPES = [
+    {
+        "titre": "Étape 1 - Comprendre le client et le problème",
+        "objectif": "Identifier qui paie, quel est son problème prioritaire et comment "
+                    "il le vit au quotidien. Rien ne se construit sans cette preuve.",
+        "activites": ["Définir le segment client principal (qui paie)",
+                      "Réaliser des interviews terrain (besoin, fréquence, budget)",
+                      "Cartographier la concurrence locale",
+                      "Synthétiser les apprentissages clés"],
+        "livrables": ["Fiche client : segment + douleur prioritaire",
+                      "Synthèse des interviews (15-30)",
+                      "3-5 hypothèses à tester"],
+        "questions": [
+            "Qui paie réellement : l'utilisateur, le décideur ou un tiers ?",
+            "Quelle est la douleur n°1 de ton client et comment se manifeste-t-elle au quotidien ?",
+            "Quelles alternatives tes clients utilisent-ils aujourd'hui et pourquoi ?"
+        ]
+    },
+    {
+        "titre": "Étape 2 - Proposition de valeur et différenciation",
+        "objectif": "Exprimer clairement, en une phrase, pourquoi le client te choisit "
+                    "plutôt qu'une alternative.",
+        "activites": ["Formuler la proposition de valeur (pour qui / problème / solution / bénéfice)",
+                      "Tester 3 messages commerciaux et recueillir les retours",
+                      "Clarifier la différenciation (prix, qualité, proximité, confiance)"],
+        "livrables": ["Proposition de valeur validée",
+                      "3 messages testés + retours clients"],
+        "questions": [
+            "Si tu avais 10 secondes, que dirais-tu pour convaincre un client ?",
+            "Pourquoi un client devrait-il te faire confiance ?",
+            "Quel élément de ton offre est impossible à copier facilement ?"
+        ]
+    },
+    {
+        "titre": "Étape 3 - MVP / Prototype minimum viable",
+        "objectif": "Passer de l'idée à une solution testable. Le MVP n'est pas parfait : "
+                    "il sert à apprendre vite.",
+        "activites": ["Définir le minimum de fonctions qui délivre la valeur",
+                      "Organiser un test utilisateur avec critères de succès",
+                      "Mesurer les retours et itérer (au moins 2 améliorations)"],
+        "livrables": ["MVP démontrable",
+                      "1 test utilisateur documenté",
+                      "2 itérations basées sur les retours"],
+        "questions": [
+            "Que peux-tu tester en 48h avec les moyens actuels ?",
+            "Quel est le minimum indispensable pour délivrer la valeur ?",
+            "Quel critère concret rendra ton test « réussi » ?"
+        ]
+    },
+    {
+        "titre": "Étape 4 - Modèle économique et pricing",
+        "objectif": "Montrer comment l'entreprise crée, délivre et capture la valeur : "
+                    "revenus, coûts et marge.",
+        "activites": ["Compléter le business model (clients, valeur, canaux, revenus, coûts)",
+                      "Calculer le coût de revient simplifié",
+                      "Fixer un prix cohérent (marché + marge + capacité à payer)"],
+        "livrables": ["Business model complet à 1 page",
+                      "Fiche pricing : prix, coûts, marge brute"],
+        "questions": [
+            "Qui paie ? Quand ? Pour quoi exactement ?",
+            "Quels coûts augmentent quand tu vends plus ?",
+            "Quelle marge minimale dois-tu absolument protéger ?"
+        ]
+    },
+    {
+        "titre": "Étape 5 - Go-to-market : premières ventes",
+        "objectif": "Obtenir une traction commerciale. Un projet devient entreprise "
+                    "quand il vend, même petit.",
+        "activites": ["Choisir UN canal principal (terrain, revendeur, WhatsApp...)",
+                      "Construire un pipeline : leads → rendez-vous → offre → vente",
+                      "Mettre en place une routine de relance (J+2, J+7)"],
+        "livrables": ["Plan commercial 30 jours",
+                      "Pipeline actif avec preuves d'action",
+                      "1 vente, précommande ou pilote"],
+        "questions": [
+            "Quel est ton canal n°1 et pourquoi celui-là ?",
+            "Quelle est ta prochaine vente concrète (client, date) ?",
+            "Quelle objection revient le plus souvent chez tes prospects ?"
+        ]
+    },
+    {
+        "titre": "Étape 6 - Finance : cashflow et besoin de financement",
+        "objectif": "Sécuriser la trésorerie et préparer un besoin de financement crédible.",
+        "activites": ["Construire un cashflow prévisionnel 12 mois",
+                      "Identifier le besoin réel (montant + calendrier)",
+                      "Définir l'usage des fonds et le retour attendu"],
+        "livrables": ["Cashflow 12 mois validé",
+                      "Besoin chiffré + usage des fonds",
+                      "3 options de financement comparées"],
+        "questions": [
+            "Combien de cash te reste-t-il et pour combien de semaines ?",
+            "Quel est le besoin minimal pour atteindre la prochaine preuve ?",
+            "Que se passe-t-il si tu n'obtiens pas le financement ?"
+        ]
+    },
+    {
+        "titre": "Étape 7 - Opérations et qualité",
+        "objectif": "Stabiliser la production/livraison, réduire pertes et retards, "
+                    "standardiser la qualité.",
+        "activites": ["Définir les procédures clés (production, vente, service)",
+                      "Mettre en place un contrôle qualité basique",
+                      "Suivre stocks et indicateurs opérationnels"],
+        "livrables": ["Procédure simple des processus critiques",
+                      "Checklist qualité + suivi des retours"],
+        "questions": [
+            "Où perds-tu du temps ou de l'argent dans ton processus ?",
+            "Quelle étape crée le plus d'erreurs ?",
+            "Que faut-il standardiser en premier ?"
+        ]
+    },
+    {
+        "titre": "Étape 8 - Administration, RH et juridique",
+        "objectif": "Sécuriser les relations commerciales, réduire les litiges et "
+                    "préparer la formalisation progressive.",
+        "activites": ["Constituer le kit de documents essentiels",
+                      "Mettre en place des modèles de contrats simples",
+                      "Identifier les 10 risques majeurs et les traiter"],
+        "livrables": ["Kit administratif minimal",
+                      "3 modèles de contrats adaptés",
+                      "Registre des risques + plan de formalisation"],
+        "questions": [
+            "Quel risque pourrait tuer ton activité en 30 jours ?",
+            "Que dois-tu formaliser maintenant vs plus tard ?",
+            "Qui signe quoi, et à quel moment ?"
+        ]
+    },
+    {
+        "titre": "Étape 9 - Pitch final et readiness financement",
+        "objectif": "Être capable de convaincre des financeurs avec des preuves et "
+                    "des chiffres.",
+        "activites": ["Construire un pitch de 10 points, 5 minutes maximum",
+                      "Préparer la session questions/réponses (objections, risques)",
+                      "Assembler le dossier de financement complet"],
+        "livrables": ["Pitch final",
+                      "Dossier de financement complet",
+                      "Liste de 10 financeurs/partenaires cibles"],
+        "questions": [
+            "Quelle est ta preuve la plus forte, montrable en 15 secondes ?",
+            "Pourquoi toi et pas un concurrent ?",
+            "Quelle est la prochaine étape mesurable après le financement ?"
+        ]
+    },
 ]
 
 # ---------- COACH IA GÉNÉRATIVE (Gemini) ----------
 PROMPT_COACH = """
 Tu es "Coach IA", le mentor principal d'un incubateur d'entreprises numérique
-au Tchad, reconnu comme LA référence des entrepreneurs tchadiens. Tu combines
-l'expertise d'un incubateur professionnel : business model, étude de marché,
-prévisionnel financier, formalisation juridique tchadienne (RCCM, NIF, impôts,
-formes juridiques), marketing adapté au marché tchadien, et développement
-personnel de l'entrepreneur.
+au Tchad, reconnu comme LA référence des entrepreneurs tchadiens. Tu appliques
+une méthode de coaching professionnelle : questionnement socratique (tu ne donnes
+pas la solution toute cuite, tu fais réfléchir), écoute active, posture de miroir
+critique bienveillant, et exigence sur les preuves terrain.
 
-TES PRINCIPES :
-1. PÉDAGOGIE avant tout : chaque réponse doit faire apprendre quelque chose.
-   Explique le "pourquoi", pas seulement le "comment".
-2. STRUCTURE systématique de tes réponses :
-   🧠 Une explication courte et claire du concept
-   🇹🇩 Un exemple concret adapté au contexte tchadien (marchés de N'Djamena,
-      Mobile Money, agriculture, commerce transfrontalier, jeunesse...)
-   ✅ Une action concrète à réaliser cette semaine
-   ❓ Une question qui pousse l'entrepreneur à réfléchir et répondre
-3. TON : encourageant, respectueux, professionnel — jamais condescendant.
-   Félicite les progrès. Normalise les difficultés.
-4. Si la question sort du cadre entrepreneurial, réponds brièvement puis
-   recadre vers son projet.
-5. Longueur : 150 à 250 mots maximum. Français simple et clair.
-6. Tu connais le stade du projet, le domaine et l'étape en cours : adapte
-   TOUJOURS tes conseils à ce contexte précis.
+POUR CHAQUE RÉPONSE DE L'ENTREPRENEUR, STRUCTURE OBLIGATOIRE :
+🔎 **Analyse logique** : ce qui est solide dans sa réponse + ce qui manque ou
+   reste vague (sois précis, cite ses propres mots).
+🧭 **Coaching** : un conseil concret et adapté au contexte tchadien (marchés,
+   mobile money, saisonnalité, réalités locales).
+✅ **Action de la semaine** : une seule action concrète, faisable, mesurable.
+❓ **Question de suivi** : une question ouverte qui le fait progresser.
+
+RÈGLES : français simple, encourageant mais exigeant ; 150-250 mots maximum ;
+jamais condescendant ; tu connais son stade, son domaine et son étape en cours
+et tu t'y adaptes ; si la question sort du cadre, réponds brièvement et recadre.
 """
 
 def reponse_ia_genai(message, contexte):
-    """Pose la question de l'entrepreneur à Gemini. Renvoie None en cas d'échec."""
     if not GENAI_OK:
         return None
     try:
@@ -328,60 +489,69 @@ def reponse_ia_genai(message, contexte):
     except Exception:
         return None
 
-# ---------- MOTEUR DE SECOURS (par mots-clés, si pas d'IA générative) ----------
+# ---------- MOTEUR DE SECOURS (par mots-clés) ----------
 REGLES_IA = [
     (["argent", "finance", "fonds", "capital", "prêt", "pret", "budget",
-      "fcfa", "coût", "cout", "cher", "moyens"],
-     "💰 **La finance d'abord :** commence avec le minimum viable. Liste tes 3 premières "
-     "dépenses indispensables, coupe le reste. Au Tchad : tontine, microfinance locale, "
-     "concours d'entrepreneuriat, puis banques quand ton dossier sera bancable."),
+      "fcfa", "coût", "cout", "cash", "trésorerie", "tresorerie"],
+     "💰 **Analyse :** ta préoccupation financière est légitime — c'est le nerf de "
+     "la guerre.\n🧭 **Coaching :** commence avec le minimum viable. Liste tes 3 "
+     "dépenses indispensables, coupe le reste. Options au Tchad : tontine, "
+     "microfinance, concours d'entrepreneuriat, puis banques quand le dossier est prêt.\n"
+     "✅ **Action :** note aujourd'hui ton besoin minimal en FCFA et son usage précis.\n"
+     "❓ **Question :** quelle dépense peut attendre 3 mois ?"),
 
-    (["client", "vente", "vendre", "marché", "marche", "acheter", "demande"],
-     "🎯 **Trouver ses clients :** commence par ceux qui ont le problème le plus urgent. "
-     "Va à leur rencontre (marchés, quartiers, WhatsApp). La prévente valide ton marché "
-     "sans investir."),
+    (["client", "vente", "vendre", "marché", "marche", "acheter", "demande", "pipeline"],
+     "🎯 **Analyse :** sans ventes, pas d'entreprise — ta priorité est juste.\n"
+     "🧭 **Coaching :** choisis UN canal prioritaire et maîtrise-le avant d'en ajouter. "
+     "La prévente valide ton marché sans investir.\n"
+     "✅ **Action :** contacte 5 clients potentiels cette semaine, note leurs réponses.\n"
+     "❓ **Question :** quelle objection revient le plus souvent ?"),
 
     (["peur", "stress", "échouer", "echouer", "risque", "oser", "confiance",
-      "doute", "incapable"],
-     "💛 **La peur est normale :** tous les grands entrepreneurs ont douté. Teste petit, "
-     "apprends vite, répète. Chaque étape cochée est une victoire réelle."),
+      "doute", "incapable", "imposteur"],
+     "💛 **Analyse :** ce doute est partagé par tous les entrepreneurs — il est un "
+     "signe de sérieux, pas de faiblesse.\n🧭 **Coaching :** réduis le risque : "
+     "teste petit, apprends vite, répète.\n"
+     "✅ **Action :** célèbre aujourd'hui UNE petite victoire déjà accomplie.\n"
+     "❓ **Question :** quelle est la pire chose réaliste qui puisse arriver, et "
+     "comment t'y prépares-tu ?"),
 
     (["temps", "occupé", "emploi", "horaire", "disponible"],
-     "⏰ **Gérer son temps :** 1h concentrée par jour sur UNE action concrète suffit. "
-     "Bloque un créneau fixe quotidien et protège-le."),
+     "⏰ **Analyse :** le temps est une ressource, pas une excuse.\n"
+     "🧭 **Coaching :** 1h concentrée par jour sur UNE action suffit à faire "
+     "décoller un projet.\n"
+     "✅ **Action :** bloque un créneau quotidien fixe (ex: 19h-20h) dans ton agenda.\n"
+     "❓ **Question :** quelle activité de ta journée peux-tu réduire de 30 min ?"),
 
     (["famille", "entourage", "conjoint", "mari", "parents", "amis"],
-     "👨‍👩‍👧 **L'entourage :** convaincs par les résultats visibles, pas par les mots. "
-     "Implique un proche dans une tâche concrète."),
+     "👨‍👩‍👧 **Analyse :** le soutien de l'entourage conditionne souvent la "
+     "persévérance.\n🧭 **Coaching :** convaincs par les résultats visibles, "
+     "pas par les mots. Implique un proche dans une tâche concrète.\n"
+     "✅ **Action :** partage avec ta famille UNE victoire récente du projet.\n"
+     "❓ **Question :** qui dans ton entourage pourrait devenir ton premier allié ?"),
 
     (["papier", "formalité", "formalités", "rccm", "impôt", "impot",
-      "administration", "statut", "legal", "légal"],
-     "📄 **Les formalités :** ne les reporte pas. RCCM + NIF = compte bancaire, "
-     "factures, financements. La Phase 4 te guide pas à pas."),
-
-    (["expérience", "experience", "compétence", "competence", "savoir",
-      "formation", "diplôme"],
-     "📚 **Compétences :** travaille UNE seule compétence bloquante ce mois-ci "
-     "(souvent la vente ou la gestion)."),
+      "administration", "statut", "legal", "légal", "contrat"],
+     "📄 **Analyse :** formaliser tôt protège l'activité et ouvre l'accès aux "
+     "financements.\n🧭 **Coaching :** au Tchad : RCCM + NIF = compte bancaire, "
+     "factures, crédibilité. Avance par étapes selon tes moyens.\n"
+     "✅ **Action :** liste les 3 documents à préparer pour ton immatriculation.\n"
+     "❓ **Question :** quelle formalisation peux-tu faire dès ce mois-ci ?"),
 
     (["concurrence", "concurrent", "déjà", "deja", "copier", "copie"],
-     "⚔️ **La concurrence prouve le marché.** Ta différence : prix, qualité, "
-     "proximité, service ou spécialisation."),
-
-    (["équipe", "equipe", "associé", "associer", "partenaire", "seul"],
-     "🤝 **Plus fort à plusieurs :** teste une collaboration sur un petit projet "
-     "avant de t'engager. Seul, c'est OK aussi au départ."),
-
-    (["internet", "connexion", "réseau social", "whatsapp", "publicité",
-      "marketing", "communication"],
-     "📱 **Visibilité :** WhatsApp et Facebook sont puissants au Tchad. Photos réelles, "
-     "témoignages, publication régulière — suffisant pour démarrer."),
+     "⚔️ **Analyse :** la concurrence prouve que le marché existe.\n"
+     "🧭 **Coaching :** analyse 2-3 concurrents : leurs forces, leurs négligences — "
+     "c'est là que tu gagneras.\n"
+     "✅ **Action :** compare aujourd'hui ton prix à celui de 2 concurrents.\n"
+     "❓ **Question :** qu'offres-tu qu'ils ne peuvent pas copier facilement ?"),
 ]
 
 REPONSE_DEFAUT = (
-    "🤔 Merci pour ta question ! Détaille-la un peu plus (parle d'argent, de "
-    "clients, de peur, de temps, de famille ou de formalités) pour que je puisse "
-    "te guider précisément.")
+    "🤔 **Analyse :** ta réponse mérite qu'on creuse ensemble.\n"
+    "🧭 **Coaching :** détaille un peu plus : parle d'argent, de clients, de "
+    "temps, d'équipe ou de formalités — je pourrai te guider précisément.\n"
+    "✅ **Action :** reformule ta préoccupation en une question précise.\n"
+    "❓ **Question :** qu'est-ce qui te bloque le plus en ce moment ?")
 
 def reponse_ia(message, titre_etape):
     texte = message.lower()
@@ -391,7 +561,6 @@ def reponse_ia(message, titre_etape):
     return REPONSE_DEFAUT + f"\n\n📌 *(Étape : {titre_etape})*"
 
 def construire_contexte(titre_etape):
-    """Rassemble tout ce que l'IA doit savoir sur l'entrepreneur."""
     stade = st.session_state.get("stade")
     label_stade = DIAGNOSTICS.get(stade, {}).get("label", "non précisé")
     domaine = st.session_state.get("diag_domaine") or "non précisé"
@@ -405,16 +574,20 @@ def construire_contexte(titre_etape):
             f"Diagnostic : problème = {r1} | clients visés = {r2}")
 
 def envoyer_message(i, j, titre_etape):
-    """Envoi le message : IA générative d'abord, moteur de secours ensuite."""
+    """Envoie le message : IA générative d'abord, moteur de secours ensuite.
+    Conserve aussi les réponses de l'entrepreneur pour le projet final."""
     cle_champ = f"q_{i}_{j}"
     cle_chat = f"chat_{i}_{j}"
     message = st.session_state.get(cle_champ, "").strip()
     if message:
         reponse = reponse_ia_genai(message, construire_contexte(titre_etape))
         if reponse is None:
-            reponse = reponse_ia(message, titre_etape)  # secours
+            reponse = reponse_ia(message, titre_etape)
             reponse += "\n\n_⚙️ (Mode hors-ligne : branche la clé Gemini pour le coach complet)_"
         st.session_state.setdefault(cle_chat, []).append((message, reponse))
+        # accumulation des réponses de l'entrepreneur pour le projet final
+        ancien = st.session_state.get(f"synthese_{i}", "")
+        st.session_state[f"synthese_{i}"] = (ancien + "\n- " + message).strip()
         st.session_state[cle_champ] = ""
 
 # ---------- FORMULES ----------
@@ -426,7 +599,11 @@ FORMULES = {
 }
 
 PAGES = ["🏠 Accueil", "🎯 Diagnostic", "💰 Abonnement",
-         "🗺️ Mon parcours", "📊 Mon score"]
+         "🗺️ Mon parcours", "📜 Projet final & Attestation"]
+
+POSTES_BUDGET = ["Équipement / Matériel", "Stock / Matière première",
+                 "Marketing / Communication", "Formalisation juridique",
+                 "Formation", "Trésorerie de sécurité"]
 
 def aller_a(nouvelle_page):
     st.session_state.page = nouvelle_page
@@ -444,10 +621,6 @@ def boutons_navigation(index_page, passer_actif=True, action_passer=None):
         if index_page < len(PAGES) - 1:
             if st.button("Suivant ➡️", use_container_width=True, type="primary"):
                 aller_a(PAGES[index_page + 1])
-        else:
-            if st.button("🎉 Terminer", use_container_width=True, type="primary"):
-                st.balloons()
-                st.success("Bravo ! Ton parcours d'incubation est terminé. 🎓")
 
 # ============================================
 # BARRE LATÉRALE : AUTHENTIFICATION
@@ -501,13 +674,37 @@ index_page = PAGES.index(page)
 # PAGES
 # ============================================
 if page == "🏠 Accueil":
-    langue = st.selectbox("Langue / اللغة", ["fr", "ar"])
+    st.markdown("""
+    <div class="hero">
+        <span class="badge">🇹🇩 100% en ligne — Accessible partout au Tchad</span>
+        <h1>🚀 Incubateur IA Tchad</h1>
+        <p>De l'idée à l'entreprise bancable : un coach IA professionnel,
+        un parcours structuré en 9 étapes, et une attestation à la clé.</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.markdown("""<div class="carte carte-or"><h4>🤖 Coach IA</h4>
+        <p>Un mentor qui analyse chacune de tes réponses et te pousse
+        vers l'action.</p></div>""", unsafe_allow_html=True)
+    with col2:
+        st.markdown("""<div class="carte carte-vert"><h4>🗺️ 9 étapes</h4>
+        <p>Un parcours professionnel : du client à financer, jusqu'au
+        dossier bancable.</p></div>""", unsafe_allow_html=True)
+    with col3:
+        st.markdown("""<div class="carte carte-rouge"><h4>📜 Attestation</h4>
+        <p>À la fin : ton projet budgétisé + une attestation nominative
+        téléchargeable.</p></div>""", unsafe_allow_html=True)
+
+    st.divider()
+    langue = st.selectbox("🌐 Langue / اللغة", ["fr", "ar"])
     st.session_state.langue = langue
 
-    st.title(T["bienvenue"][langue])
+    st.markdown(f"### {T['bienvenue'][langue]}")
     st.write(T["objectif"][langue])
 
-    prenom = st.text_input("Ton prénom", value=st.session_state.prenom)
+    prenom = st.text_input("✍️ Ton prénom", value=st.session_state.prenom)
     st.session_state.prenom = prenom
 
     if st.session_state.prenom:
@@ -589,8 +786,8 @@ elif page == "🎯 Diagnostic":
 
 **🧭 Premier conseil de l'IA :** {infos_domaine["conseil"]}
 
-**➡️ Prochaine étape recommandée :** l'étude de marché de la Phase 1
-de ton parcours (« Analyse et validation de l'idée »).
+**➡️ Prochaine étape recommandée :** l'Étape 1 de ton parcours —
+« Comprendre le client et le problème ».
         """)
         st.success("✅ Diagnostic complet et sauvegardé ! Clique sur « Suivant ».")
     else:
@@ -627,62 +824,177 @@ elif page == "🗺️ Mon parcours":
         st.warning("⚠️ Va d'abord à la page **Abonnement** pour activer ton accès.")
     else:
         st.title(f"🗺️ Mon parcours ({st.session_state.duree} mois)")
-        st.caption("💡 Coche une étape : ton mentor IA te pose une question et "
-                   "répond à tes préoccupations juste en dessous.")
+        st.caption("💡 Pour chaque étape : lis l'objectif, discute avec le coach IA "
+                   "(obligatoire), puis valide l'étape. À la fin : ton projet "
+                   "bancable complet + attestation.")
 
-        for i, (titre_phase, etapes) in enumerate(PHASES):
-            validees_phase = sum(
-                1 for j in range(len(etapes))
-                if st.session_state.get(f"etape_{i}_{j}", False))
-            with st.expander(
-                    f"**{titre_phase}** — {validees_phase}/{len(etapes)} étapes"):
-                for j, (etape, question_ia) in enumerate(etapes):
-                    cochee = st.checkbox(etape, key=f"etape_{i}_{j}")
+        validees = sum(1 for i in range(len(ETAPES))
+                       if st.session_state.get(f"etape_{i}", False))
+        st.progress(validees / len(ETAPES))
+        st.caption(f"Progression : {validees} / {len(ETAPES)} étapes validées")
 
-                    if cochee:
-                        # ---- LE MENTOR IA PREND LE RELAIS ----
-                        st.markdown(
-                            f"🤖 **Ton mentor IA :** _{question_ia}_")
-                        st.text_input("Ta réponse ou ta préoccupation :",
-                                      key=f"q_{i}_{j}",
-                                      placeholder="Ex: j'ai peur de manquer "
-                                                  "d'argent pour démarrer...")
-                        st.button("📩 Envoyer à l'IA",
-                                  key=f"btn_{i}_{j}",
-                                  on_click=envoyer_message,
-                                  args=(i, j, etape))
+        for i, etape in enumerate(ETAPES):
+            nb_echanges = len(st.session_state.get(f"chat_{i}_0", [])) + \
+                          len(st.session_state.get(f"chat_{i}_1", [])) + \
+                          len(st.session_state.get(f"chat_{i}_2", []))
+            a_discute = nb_echanges >= 1
+            titre = etape["titre"] + (" ✅" if st.session_state.get(f"etape_{i}") else "")
+            with st.expander(f"**{titre}**"):
+                st.markdown(f"**🎯 Objectif :** {etape['objectif']}")
+                st.markdown("**🛠️ Activités clés :**")
+                for a in etape["activites"]:
+                    st.markdown(f"- {a}")
+                st.markdown("**📦 Livrables attendus :**")
+                for l in etape["livrables"]:
+                    st.markdown(f"- {l}")
 
-                        # Affichage de la conversation
-                        for question, reponse in st.session_state.get(
-                                f"chat_{i}_{j}", []):
-                            st.markdown(
-                                f"> **Toi :** {question}")
-                            st.markdown(reponse)
+                st.divider()
+                st.markdown("**🤖 Séance de coaching avec l'IA**")
+
+                for j, question in enumerate(etape["questions"]):
+                    st.markdown(f"❓ _{question}_")
+                    st.text_input("Ta réponse ou ta préoccupation :",
+                                  key=f"q_{i}_{j}",
+                                  placeholder="Écris ta réponse ici...")
+                    st.button("📩 Envoyer au coach",
+                              key=f"btn_{i}_{j}",
+                              on_click=envoyer_message,
+                              args=(i, j, etape["titre"]))
+                    for question_posee, reponse in st.session_state.get(
+                            f"chat_{i}_{j}", []):
+                        st.markdown(f"> **Toi :** {question_posee}")
+                        st.markdown(reponse)
+
+                st.divider()
+                if a_discute:
+                    cochee = st.checkbox("✅ Je valide cette étape (après coaching)",
+                                         key=f"etape_{i}")
+                else:
+                    st.info("🔒 Discute d'abord avec le coach IA (envoie au moins "
+                            "un message) pour pouvoir valider cette étape.")
 
     boutons_navigation(index_page)
 
-elif page == "📊 Mon score":
-    st.title("📊 Score de bancabilité")
+elif page == "📜 Projet final & Attestation":
+    st.title("📜 Projet final, budget et attestation")
+    st.write("Cette page se débloque à la **fin de ton incubation**, quand les "
+             "9 étapes du parcours sont validées.")
 
-    total = sum(len(e) for _, e in PHASES)
-    validees = sum(
-        1 for i in range(len(PHASES))
-        for j in range(len(PHASES[i][1]))
-        if st.session_state.get(f"etape_{i}_{j}", False)
-    )
-    score = round(validees / total * 100)
+    manquantes = [ETAPES[i]["titre"] for i in range(len(ETAPES))
+                  if not st.session_state.get(f"etape_{i}", False)]
 
-    st.metric("Étapes validées", f"{validees} / {total}")
-    st.progress(score / 100)
-    st.metric("Score de bancabilité", f"{score} %")
-
-    if score >= 80:
-        st.success("🎉 Projet très bancable ! Prêt pour les banques et investisseurs.")
-    elif score >= 50:
-        st.info("💪 Bonne avancée ! Encore quelques étapes pour un dossier solide.")
+    if manquantes:
+        st.warning(f"⏳ Il te reste **{len(manquantes)} étape(s)** à valider :")
+        for m in manquantes:
+            st.markdown(f"- {m}")
     else:
-        st.warning("🌱 C'est un début ! Continue étape par étape.")
+        st.success("🎉 Incubation terminée ! Génère ton projet bancable complet.")
 
-    boutons_navigation(index_page)
+        # ---- 1. PROJET BANCABLE GÉNÉRÉ PAR L'IA ----
+        st.subheader("1️⃣ Ton projet bancable complet")
+        if st.button("🤖 Générer mon dossier avec l'IA", type="primary"):
+            contexte = (f"Porteur : {st.session_state.prenom} | Domaine : "
+                        f"{st.session_state.diag_domaine} | Stade : "
+                        f"{DIAGNOSTICS.get(st.session_state.stade, {}).get('label', '')}\n")
+            for i, etape in enumerate(ETAPES):
+                contexte += (f"\n### {etape['titre']}\n"
+                             f"{st.session_state.get(f'synthese_{i}', '—')}\n")
+            prompt_final = (
+                "Tu es un expert en dossiers bancaires pour entrepreneurs au Tchad. "
+                "À partir des éléments de l'entrepreneur ci-dessous, rédige son "
+                "DOSSIER BANCABLE COMPLET, structuré ainsi :\n"
+                "1. Résumé du projet (1 paragraphe percutant)\n"
+                "2. Le problème et les clients (preuves terrain)\n"
+                "3. Proposition de valeur et différenciation\n"
+                "4. Modèle économique (revenus, coûts, marge)\n"
+                "5. Stratégie commerciale et traction\n"
+                "6. Besoin de financement + usage des fonds\n"
+                "7. Plan de remboursement et risques\n"
+                "8. Les 3 prochaines étapes mesurables\n"
+                "Sois concret, chiffré quand possible, adapté au contexte tchadien. "
+                "Maximum 600 mots.\n\nÉLÉMENTS DE L'ENTREPRENEUR :\n" + contexte)
+            doc = None
+            if GENAI_OK:
+                try:
+                    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+                    model = genai.GenerativeModel("gemini-1.5-flash")
+                    doc = model.generate_content(prompt_final).text
+                except Exception:
+                    doc = None
+            if doc is None:
+                doc = ("⚠️ IA non disponible. Voici ton dossier à compléter avec "
+                       "les réponses que tu as données dans chaque étape :\n\n"
+                       + contexte.replace("###", "**").replace("\n- ", "\n- "))
+            st.session_state.projet_final = doc
+
+        if st.session_state.projet_final:
+            st.markdown(st.session_state.projet_final)
+
+        st.divider()
+
+        # ---- 2. BUDGET PRÉVISIONNEL ----
+        st.subheader("2️⃣ Budget prévisionnel de lancement")
+        st.caption("Estime chaque poste en FCFA — sois prudent, c'est ce que "
+                   "les financeurs liront.")
+        total_budget = 0
+        cols = st.columns(2)
+        for k, poste in enumerate(POSTES_BUDGET):
+            with cols[k % 2]:
+                montant = st.number_input(poste, min_value=0, step=5000,
+                                          key=f"budget_{k}")
+                total_budget += montant
+        st.metric("💰 TOTAL du budget de lancement", f"{total_budget:,} FCFA".replace(",", " "))
+
+        st.divider()
+
+        # ---- 3. ATTESTATION ----
+        st.subheader("3️⃣ Ton attestation")
+        date_jour = datetime.date.today().strftime("%d/%m/%Y")
+        st.markdown(f"""
+---
+<div style="border:3px solid #1a5276; border-radius:12px; padding:25px; text-align:center; background-color:#fdfbf7;">
+
+# 📜 ATTESTATION DE FIN D'INCUBATION
+
+## Incubateur IA — Tchad 🇹🇩
+
+<br>
+
+Nous attestons que
+
+# {st.session_state.prenom}
+
+a suivi avec succès le **parcours complet d'incubation entrepreneurial** de
+**{st.session_state.duree} mois** (9 étapes, coaching IA inclus), et a produit un
+**projet structuré, budgétisé ({total_budget:,} FCFA) et bancable**.
+
+Domaine d'activité : {st.session_state.diag_domaine}
+
+Fait le {date_jour}
+
+🤖 _Coach IA — Incubateur IA Tchad_
+
+</div>
+""".replace(",", " "), unsafe_allow_html=True)
+
+        texte_attestation = (
+            f"ATTESTATION DE FIN D'INCUBATION\n"
+            f"Incubateur IA - Tchad\n\n"
+            f"Nous attestons que {st.session_state.prenom} a suivi avec succès le "
+            f"parcours complet d'incubation entrepreneurial de {st.session_state.duree} "
+            f"mois (9 étapes, coaching IA inclus), et a produit un projet structuré, "
+            f"budgétisé ({total_budget} FCFA) et bancable.\n"
+            f"Domaine d'activité : {st.session_state.diag_domaine}\n"
+            f"Fait le {date_jour}.\nCoach IA - Incubateur IA Tchad")
+        st.download_button("⬇️ Télécharger mon attestation",
+                           data=texte_attestation,
+                           file_name="attestation_incubation.txt",
+                           mime="text/plain")
+
+st.markdown("---")
+st.markdown('<div class="pied">🚀 Incubateur IA Tchad — © 2026 — '
+            'Fait avec ❤️ pour les entrepreneurs tchadiens<br>'
+            '📱 Moov +235 98 28 25 52 · Airtel +235 62 11 62 78</div>',
+            unsafe_allow_html=True)
 
 sauvegarder(st.session_state.user)
