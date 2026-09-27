@@ -6,7 +6,7 @@ import time
 import datetime
 
 # ============================================
-# INCUBATEUR IA TCHAD - v10\n# Formulaires téléchargeables par étape +\n# dépôt du formulaire rempli + analyse personnalisée du coach IA
+# INCUBATEUR IA TCHAD - v11\n# Coaching guidé activité par activité : le coach IA\n# explique COMMENT faire chaque activité clé, puis analyse\n# le résultat de l'entrepreneur
 # Parcours réorganisé selon 9 étapes de coaching
 # professionnel (sans nom d'organisation) :
 # chaque étape = objectif + livrables + coach IA
@@ -846,6 +846,36 @@ def analyser_formulaire(i):
         st.session_state.get(f"synthese_{i}", "") +
         f"\n[Formulaire rempli]\n{contenu[:500]}").strip()
 
+
+def generer_guide(i, j, activite):
+    """Le coach IA génère un mini-guide 'comment faire' pour l'activité."""
+    stade = st.session_state.get("stade")
+    label_stade = DIAGNOSTICS.get(stade, {}).get("label", "non précisé")
+    prompt = (
+        "Tu es le coach d'un incubateur d'entreprises au Tchad. Un entrepreneur "
+        f"({st.session_state.get('prenom', '')}, stade : {label_stade}, domaine : "
+        f"{st.session_state.get('diag_domaine', '')}) doit réaliser cette activité "
+        f"du parcours : « {activite} ».\n"
+        "Rédige un MINI-GUIDE pratique (120 mots max, en français simple) :\n"
+        "1️⃣ La méthode en 4-5 étapes concrètes\n"
+        "2️⃣ Un exemple concret adapté au contexte tchadien\n"
+        "3️⃣ Le piège principal à éviter\n"
+        "Va droit au but, ton entrepreneur veut AGIR.")
+    resultat = None
+    if GENAI_OK:
+        try:
+            genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+            model = genai.GenerativeModel("gemini-1.5-flash")
+            resultat = model.generate_content(prompt).text
+        except Exception:
+            resultat = None
+    if resultat is None:
+        resultat = ("💡 _Guide indisponible (mode hors-ligne). Méthode générale : "
+                    "découpe l'activité en petites actions, fais la première "
+                    "aujourd'hui, note ce que tu observes, puis partage tes "
+                    "résultats au coach pour un retour personnalisé._")
+    st.session_state[f"guide_{i}_{j}"] = resultat
+
 # ---------- FORMULES ----------
 FORMULES = {
     "1 mois - 5 000 F": "5 000 F",
@@ -1090,9 +1120,8 @@ elif page == "🗺️ Mon parcours":
         st.caption(f"Progression : {validees} / {len(ETAPES)} étapes validées")
 
         for i, etape in enumerate(ETAPES):
-            nb_echanges = len(st.session_state.get(f"chat_{i}_0", [])) + \
-                          len(st.session_state.get(f"chat_{i}_1", [])) + \
-                          len(st.session_state.get(f"chat_{i}_2", []))
+            nb_echanges = sum(len(st.session_state.get(f"chat_{i}_{j}", []))
+                              for j in range(len(etape["activites"])))
             a_discute = nb_echanges >= 1
             titre = etape["titre"] + (" ✅" if st.session_state.get(f"etape_{i}") else "")
             with st.expander(f"**{titre}**"):
@@ -1105,17 +1134,25 @@ elif page == "🗺️ Mon parcours":
                     st.markdown(f"- {l}")
 
                 st.divider()
-                st.markdown("**🤖 Séance de coaching avec l'IA**")
+                st.markdown("**🤖 Atelier guidé : réalise chaque activité avec ton coach**")
+                st.caption("Pour chaque activité : 1) lis le guide du coach — "
+                           "2) exécute sur le terrain — 3) partage ton résultat — "
+                           "4) applique ses conseils.")
 
-                for j, question in enumerate(etape["questions"]):
-                    st.markdown(f"❓ _{question}_")
-                    st.text_input("Ta réponse ou ta préoccupation :",
+                for j, activite in enumerate(etape["activites"]):
+                    st.markdown(f"**🛠️ Activité {j + 1} : {activite}**")
+                    if st.button("💡 Comment faire ?", key=f"gd_{i}_{j}",
+                                 on_click=generer_guide, args=(i, j, activite)):
+                        pass
+                    if st.session_state.get(f"guide_{i}_{j}"):
+                        st.info(st.session_state[f"guide_{i}_{j}"])
+                    st.text_input("Ton résultat ou ta question :",
                                   key=f"q_{i}_{j}",
-                                  placeholder="Écris ta réponse ici...")
+                                  placeholder="Écris ce que tu as fait ou trouvé...")
                     st.button("📩 Envoyer au coach",
                               key=f"btn_{i}_{j}",
                               on_click=envoyer_message,
-                              args=(i, j, etape["titre"]))
+                              args=(i, j, activite))
                     for question_posee, reponse in st.session_state.get(
                             f"chat_{i}_{j}", []):
                         st.markdown(f"> **Toi :** {question_posee}")
